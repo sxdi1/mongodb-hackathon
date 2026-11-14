@@ -1,5 +1,8 @@
 """Offline domain tests: python -m unittest discover -s tests -p test_core.py -v"""
 import unittest, os, tempfile
+from unittest.mock import MagicMock
+from bson import ObjectId
+from fastapi.encoders import jsonable_encoder
 from app.seed import seed
 from app.models import Proposal
 from app.service import propose, resolve, gate
@@ -53,5 +56,29 @@ class CoreTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 with store.transaction() as d:d['expenses'].append({'id':'bad'});raise RuntimeError()
             with store.transaction() as d:self.assertEqual(d['expenses'],[])
+
+class MongoStoreTests(unittest.TestCase):
+    def test_insert_does_not_add_mongo_id_to_returned_document(self):
+        store=Store.__new__(Store);store.mongo=True
+        session=MagicMock()
+        store.client=MagicMock()
+        store.client.start_session.return_value.__enter__.return_value=session
+        collections={}
+        def collection(name):
+            if name not in collections:
+                collections[name]=MagicMock()
+                collections[name].find.return_value=[]
+            return collections[name]
+        store.db=MagicMock()
+        store.db.__getitem__.side_effect=collection
+        store.db.groups=collection('groups')
+        def insert(document,**kwargs): document['_id']=ObjectId()
+        collection('proposals').insert_one.side_effect=insert
+
+        proposal={'id':'proposal-1','title':'Chinese restaurant'}
+        with store.transaction() as data:
+            data['proposals'].append(proposal)
+
+        self.assertEqual(jsonable_encoder(proposal),{'id':'proposal-1','title':'Chinese restaurant'})
 
 if __name__=='__main__':unittest.main()

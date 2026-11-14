@@ -62,7 +62,7 @@ class Store:
                     if removed and c in ('auditEvents','decisions','policies'): raise ValueError('Append-only collection')
                     if removed: self.db[c].delete_many({'id':{'$in':list(removed)}},session=s)
                     for row in rows:
-                        if row['id'] not in old: self.db[c].insert_one(row,session=s)
+                        if row['id'] not in old: self.db[c].insert_one(row.copy(),session=s)
                         elif row != old[row['id']]:
                             if c in ('auditEvents','decisions','policies'): raise ValueError('Append-only application collection')
                             self.db[c].replace_one({'id':row['id']},row,session=s)
