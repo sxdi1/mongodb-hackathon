@@ -6,4 +6,4 @@ def seed():
         'policies':[dict(id='policy-1',version=1,requirements=['halal'],transport=['walk','bus','train'],cap_cents=5000,blocked_tags=['alcohol','pork'])],
         'venues':[dict(id='demo-garden',name='Garden Table (fictional)',facts=['halal','vegetarian','nut-free'],tags=[],source='Curated DEMO fixture; not real venue verification',demo=True)],
         'tickets':[dict(id='demo-ticket',owner='alex',simulated=True,status='booked')],
-        **{c:[] for c in ['proposals','votes','expenses','payments','decisions','auditEvents','conversations']}}
+        **{c:[] for c in ['proposals','votes','expenses','payments','decisions','auditEvents','conversations','searchCache']}}

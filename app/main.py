@@ -11,6 +11,7 @@ from .models import Profile, Policy, Proposal, Chat, Vote, Acknowledge, Cancel
 from .service import find, event, uid, now, propose, resolve
 from .adapters import WebAdapter
 from . import agent
+from .search import search_venues
 
 load_dotenv()
 DEMO=os.getenv('DEMO_MODE','true').lower()=='true'
@@ -40,7 +41,7 @@ def config(): return {'demo':DEMO,'agent':os.getenv('AGENT_MODE','mock'),'storag
 @app.get('/api/state')
 def state(who=Depends(actor)):
     with app.state.store.transaction() as d:
-        visible={k:v for k,v in d.items() if k not in ['members','auditEvents','decisions']}
+        visible={k:v for k,v in d.items() if k not in ['members','auditEvents','decisions','searchCache']}
         visible['members']=[{k:v for k,v in m.items() if k in ['id','name','onboarded']} for m in d['members']]
         visible['me']=find(d,'members',who)
         visible['decisions']=d['decisions'][-100:]
@@ -84,17 +85,20 @@ def chat(body:Chat,who=Depends(actor)):
         ]
         actor_name=find(d,'members',who)['name']
         d['conversations'].append(dict(id=uid(),actor=who,text=body.text,time=now(),has_image=bool(image)))
-    envelope=WebAdapter().normalize(who,dict(
+    def submit(payload):
+        # Image-derived venue identity is not verification. No model-supplied provenance.
+        if image: payload['venue_id']=None
+        with app.state.store.transaction() as d: return propose(d,who,payload,'screenshot inference' if image else 'text inference')
+    def search(query):
+        with app.state.store.transaction() as d: return search_venues(d, query)
+    envelope = WebAdapter().normalize(who,dict(
         text=body.text,
         image=image,
         mime_type=body.mime_type,
         actor_name=actor_name,
         history=history,
+        search=search,
     ))
-    def submit(payload):
-        # Image-derived venue identity is not verification. No model-supplied provenance.
-        if image: payload['venue_id']=None
-        with app.state.store.transaction() as d: return propose(d,who,payload,'screenshot inference' if image else 'text inference')
     try: result=agent.run(envelope,submit)
     except Exception:
         result={'reply':'Sorry, I couldn’t work that out just now. Could you try describing the idea another way?','tools':[]}

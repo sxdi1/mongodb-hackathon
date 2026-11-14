@@ -42,6 +42,7 @@ class Store:
             try:
                 db.execute('BEGIN IMMEDIATE')
                 data=json.loads(db.execute('SELECT data FROM state WHERE id=1').fetchone()[0])
+                data.setdefault('searchCache', [])
                 yield data
                 db.execute('UPDATE state SET data=? WHERE id=1',(json.dumps(data),))
                 db.commit()
