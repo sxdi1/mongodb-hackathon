@@ -246,6 +246,18 @@ def test_gemini_reply_uses_conversational_response(monkeypatch):
     assert result['reply'].startswith('I can help look for tacos in Montreal.')
     assert result['analysis_source']=='gemini'
 
+def test_group_members_share_one_conversation(client):
+    for who in ['alex','sara']:
+        response=client.post('/api/chat',headers=h(who),json={'text':f'Hello from {who}'})
+        assert response.status_code==200
+
+    conversations=[
+        client.get('/api/state',headers=h(who)).json()['conversations']
+        for who in ['alex','sara','dev']
+    ]
+    assert conversations[0]==conversations[1]==conversations[2]
+    assert [message['actor'] for message in conversations[0]]==['alex','bouncer','sara','bouncer']
+
 def test_unverified_claims_review(client):
     p=plan();p['venue_id']=None;p['claims']=['halal','vegetarian','nut-free']
     r=post(client,p);assert r['decision']['outcome']=='review'
@@ -322,6 +334,7 @@ def test_ui_served(client):
     response=client.get('/')
     assert response.status_code==200
     assert 'Montreal weekend' in response.text
-    assert 'nav' not in response.text and '<aside' not in response.text
-    assert 'Clear chat from this browser' in response.text
+    assert '<nav' not in response.text
+    assert '<section class="chat-panel" aria-label="Group chat">' in response.text
+    assert 'People in this chat' in response.text
     assert client.get('/app.js').status_code==200

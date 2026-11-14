@@ -1,221 +1,302 @@
-const $ = selector => document.querySelector(selector);
-const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-}[char]));
-
-let token = sessionStorage.getItem('token') || '';
+let token = sessionStorage.getItem("token") || "";
 let state;
-const EMPTY_CHAT_MARKER = '__empty__';
+let demoMode = false;
+
+const defaultAvatars = {
+  Alex: "https://randomuser.me/api/portraits/men/32.jpg",
+  Sara: "https://randomuser.me/api/portraits/women/44.jpg",
+  Dev: "https://randomuser.me/api/portraits/men/75.jpg",
+  Bouncer: "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=Bouncer&backgroundColor=e8eaff",
+};
 
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: body ? "POST" : "GET",
     headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: body === undefined ? undefined : JSON.stringify(body)
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const contentType = response.headers.get('content-type') || '';
-  const data = contentType.includes('application/json')
-    ? await response.json()
-    : { detail: (await response.text()).slice(0, 500) || `Request failed with HTTP ${response.status}` };
-  if (!response.ok) {
-    throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
-  }
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Something went wrong.");
   return data;
 }
 
-function initials(name) {
-  return String(name || '?').trim().split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase();
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]);
 }
 
-function timeLabel(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? ''
-    : new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
+function fallbackAvatar(name) {
+  return `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name || "User")}`;
 }
 
-function dateLabel(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Today';
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return 'Today';
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+function avatarFor(name, customAvatar) {
+  return customAvatar || defaultAvatars[name] || fallbackAvatar(name);
+}
+
+function avatarMarkup(name, avatar, className) {
+  const fallback = fallbackAvatar(name);
+  return `<img class="${className}" src="${escapeHTML(avatar)}" alt="${escapeHTML(name)}" onerror="this.onerror=null;this.src='${escapeHTML(fallback)}'">`;
 }
 
 function actorDetails(actor) {
-  if (actor === 'bouncer') return { name: 'Bouncer', avatar: 'B', className: 'avatar-agent', role: 'Planning assistant' };
-  const member = state.members.find(person => person.id === actor);
-  const name = member?.name || actor;
-  const className = actor === 'sara' ? 'avatar-sara' : actor === 'dev' ? 'avatar-dev' : '';
+  if (actor === "bouncer") {
+    return {
+      name: "SplitSmart Bouncer",
+      avatar: defaultAvatars.Bouncer,
+      isBouncer: true,
+    };
+  }
+
+  const member = state?.members?.find((item) => item.id === actor);
+  if (member) {
+    return {
+      name: member.name || "Member",
+      avatar: avatarFor(member.name, member.avatar_url),
+      isBouncer: false,
+    };
+  }
+
+  const name = actor || "Unknown";
   return {
     name,
-    avatar: initials(name),
-    className,
-    role: ''
+    avatar: avatarFor(name),
+    isBouncer: false,
   };
 }
 
-function visibleMessages() {
-  const key = `splitsmart-chat-cleared:${state.me.id}`;
-  const marker = localStorage.getItem(key);
-  if (!marker) return { messages:state.conversations, cleared:false };
-  if (marker === EMPTY_CHAT_MARKER) return { messages:state.conversations, cleared:true };
-  const markerIndex = state.conversations.findIndex(message => message.id === marker);
-  if (markerIndex < 0) {
-    localStorage.removeItem(key);
-    return { messages:state.conversations, cleared:false };
+function renderGroupHeader() {
+  const members = state?.members || [];
+  const groupName = state?.group?.name || state?.group_name || "Montreal weekend";
+
+  document.getElementById("chat-title").textContent = groupName;
+  document.getElementById("group-participants").innerHTML = members.map((member) => {
+    const name = member.name || "Member";
+    return `
+      <div class="group-participant">
+        ${avatarMarkup(name, avatarFor(name, member.avatar_url), "participant-avatar")}
+        <span>${escapeHTML(name)}</span>
+      </div>
+    `;
+  }).join("");
+
+  document.getElementById("group-info-members").innerHTML = members.map((member) => {
+    const name = member.name || "Member";
+    return `
+      <div class="group-info-member">
+        ${avatarMarkup(name, avatarFor(name, member.avatar_url), "group-info-avatar")}
+        <span>${escapeHTML(name)}</span>
+      </div>
+    `;
+  }).join("");
+
+  const memberSwitch = document.getElementById("demo-member-switch");
+  const memberSelect = document.getElementById("demo-member-select");
+  memberSwitch.hidden = !demoMode;
+  if (demoMode) {
+    memberSelect.innerHTML = members.map((member) =>
+      `<option value="${escapeHTML(member.id)}">${escapeHTML(member.name)}</option>`
+    ).join("");
+    memberSelect.value = state?.me?.id || "";
   }
-  return { messages:state.conversations.slice(markerIndex + 1), cleared:true };
+}
+
+function formatMessageTime(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "";
+
+  const day = date.toDateString() === new Date().toDateString()
+    ? "Today"
+    : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+  const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+  return `${day} ${time}`;
+}
+
+function shouldShowTimestamp(messages, index) {
+  if (index === 0) return true;
+  const current = new Date(messages[index].time);
+  const previous = new Date(messages[index - 1].time);
+  return !Number.isNaN(current.getTime())
+    && !Number.isNaN(previous.getTime())
+    && (current.toDateString() !== previous.toDateString() || current - previous > 4 * 60 * 60 * 1000);
 }
 
 function renderMessages() {
-  const view = visibleMessages();
-  const messages = view.messages.length
-    ? view.messages
-    : view.cleared
-      ? []
-      : [{ actor: 'bouncer', text: 'Hey, everyone! I’m Bouncer, your planning buddy. What sounds fun for the weekend?', time: new Date().toISOString() }];
+  const log = document.getElementById("message-log");
+  const messages = state?.conversations || [];
+
   if (!messages.length) {
-    $('#messages').innerHTML = '<p class="empty-chat">Chat cleared from this browser. New messages will appear here.</p>';
+    log.innerHTML = `<div class="loading-message">No messages yet. Say hello to your group.</div>`;
     return;
   }
-  let previousDate = '';
-  const html = messages.map(message => {
-    const day = dateLabel(message.time);
-    const divider = day !== previousDate ? `<div class="date-divider">${esc(day)}</div>` : '';
-    previousDate = day;
-    const sender = actorDetails(message.actor);
-    return `${divider}
-      <article class="message">
-        <div class="message-avatar ${sender.className}" aria-hidden="true">${esc(sender.avatar)}</div>
-        <div class="message-content">
-          <div class="message-meta">
-            <span class="message-name">${esc(sender.name)}</span>
-            ${sender.role ? `<span class="message-role">${esc(sender.role)}</span>` : ''}
-            <time class="message-time">${esc(timeLabel(message.time))}</time>
-          </div>
-          <p class="message-text">${esc(message.text)}</p>
-          ${message.has_image ? '<p class="message-attachment">Screenshot attached · unverified</p>' : ''}
-        </div>
-      </article>`;
-  }).join('');
-  $('#messages').innerHTML = html;
-  $('#messages').scrollTop = $('#messages').scrollHeight;
-}
 
-function renderGroup() {
-  $('#participants').textContent = `${state.members.length} people · ${state.members.map(member => member.name).join(', ')}`;
-  $('#headerMembers').innerHTML = state.members.map(member =>
-    `<span class="member-avatar" title="${esc(member.name)}" aria-label="${esc(member.name)}">${esc(initials(member.name))}</span>`
-  ).join('');
-  $('#accountAvatar').textContent = initials(state.me.name);
-  $('#accountAvatar').setAttribute('aria-label', `Signed in as ${state.me.name}`);
+  log.innerHTML = messages.map((message, index) => {
+    const actor = actorDetails(message.actor);
+    const mine = message.actor === state?.me?.id;
+    const previous = messages[index - 1];
+    const sameSender = previous && previous.actor === message.actor;
+    const classes = [
+      "message-group",
+      mine ? "mine" : "",
+      actor.isBouncer ? "bouncer" : "",
+    ].filter(Boolean).join(" ");
+
+    const timestamp = shouldShowTimestamp(messages, index)
+      ? `<div class="message-date">${escapeHTML(formatMessageTime(message.time))}</div>`
+      : "";
+    const attachment = message.image
+      ? `<img class="message-attachment" src="${escapeHTML(message.image)}" alt="Message attachment">`
+      : "";
+    const avatar = mine
+      ? ""
+      : sameSender
+        ? `<span class="message-avatar-spacer" aria-hidden="true"></span>`
+        : avatarMarkup(actor.name, actor.avatar, "message-avatar");
+
+    return `
+      ${timestamp}
+      <article class="${classes}">
+        ${!mine && !sameSender ? `<div class="message-sender">${escapeHTML(actor.name)}</div>` : ""}
+        <div class="message-line">
+          ${avatar}
+          <div class="message-bubble">${escapeHTML(message.text)}${attachment}</div>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  log.scrollTop = log.scrollHeight;
 }
 
 function showNotice(message) {
-  const notice = $('#notice');
-  notice.textContent = message;
+  document.getElementById("notice").textContent = message || "";
 }
 
 function showAuthenticationPrompt() {
-  const notice = $('#notice');
-  notice.innerHTML = `
-    <span>Enter your member access token to join this chat.</span>
-    <form class="connect-form">
-      <label class="sr-only" for="accessToken">Member access token</label>
-      <input id="accessToken" type="password" autocomplete="current-password" placeholder="Member access token" required>
-      <button type="submit">Join chat</button>
-    </form>`;
-  notice.setAttribute('role', 'status');
-  notice.querySelector('.connect-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    token = $('#accessToken').value;
-    sessionStorage.setItem('token', token);
-    await loadChat();
+  const notice = document.getElementById("notice");
+  notice.innerHTML = "";
+
+  const prompt = document.createElement("span");
+  prompt.textContent = "Enter member access token:";
+
+  const input = document.createElement("input");
+  input.className = "auth-input";
+  input.placeholder = "Access token";
+  input.setAttribute("aria-label", "Access token");
+
+  const button = document.createElement("button");
+  button.className = "auth-button";
+  button.textContent = "Continue";
+
+  notice.append(prompt, input, button);
+
+  button.addEventListener("click", async () => {
+    token = input.value.trim();
+    if (!token) return;
+
+    sessionStorage.setItem("token", token);
+    try {
+      await loadChat();
+    } catch (error) {
+      showNotice(error.message);
+    }
   });
 }
 
 async function loadChat() {
-  try {
-    state = await api('state');
-    renderGroup();
-    renderMessages();
-    showNotice('');
-  } catch (error) {
-    if (error.message.includes('token')) {
-      showAuthenticationPrompt();
-    } else {
-      showNotice(error.message);
-    }
-  }
+  state = await api("state");
+  renderGroupHeader();
+  renderMessages();
+  showNotice("");
 }
 
-$('#chatForm').addEventListener('submit', async event => {
+async function sendMessage(event) {
   event.preventDefault();
-  const input = $('#message');
+
+  const input = document.getElementById("message-input");
   const text = input.value.trim();
   if (!text) return;
 
-  const button = $('#sendButton');
+  const button = document.querySelector(".send-button");
   button.disabled = true;
-  showNotice('');
+
   try {
-    await api('chat', { text });
-    input.value = '';
-    input.style.height = 'auto';
+    await api("chat", { text });
+    input.value = "";
+    input.style.height = "auto";
+    document.querySelector(".composer").classList.remove("has-text");
     await loadChat();
-    input.focus();
   } catch (error) {
     showNotice(error.message);
   } finally {
-    button.disabled = false;
+    button.disabled = !input.value.trim();
+    input.focus();
   }
-});
+}
 
-$('#message').addEventListener('keydown', event => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    $('#chatForm').requestSubmit();
-  }
-});
+function boot() {
+  const form = document.getElementById("chat-form");
+  const input = document.getElementById("message-input");
+  const composer = document.querySelector(".composer");
+  const infoButton = document.getElementById("group-info-button");
+  const infoPanel = document.getElementById("group-info");
+  const memberSelect = document.getElementById("demo-member-select");
 
-$('#message').addEventListener('input', event => {
-  event.target.style.height = 'auto';
-  event.target.style.height = `${Math.min(event.target.scrollHeight, 140)}px`;
-});
-
-$('#clearChatButton').addEventListener('click', () => {
-  if (!state) return;
-  const confirmed = window.confirm(
-    'Clear the conversation from this browser? This does not delete messages for other group members.'
-  );
-  if (!confirmed) return;
-  const marker = state.conversations.at(-1)?.id || EMPTY_CHAT_MARKER;
-  try {
-    localStorage.setItem(`splitsmart-chat-cleared:${state.me.id}`, marker);
-  } catch (error) {
-    showNotice(`Could not clear this browser's chat view: ${error.message}`);
-    return;
-  }
-  renderMessages();
-  showNotice('Chat cleared from this browser. Other members can still see the conversation.');
-});
-
-(async () => {
-  try {
-    const config = await api('config');
-    if (config.demo && !token) {
-      token = 'demo-alex';
-      sessionStorage.setItem('token', token);
+  form.addEventListener("submit", sendMessage);
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 110)}px`;
+    const hasText = Boolean(input.value.trim());
+    composer.classList.toggle("has-text", hasText);
+    document.querySelector(".send-button").disabled = !hasText;
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
     }
-    await loadChat();
-  } catch (error) {
-    showNotice(error.message);
-  }
-})();
+  });
+
+  infoButton.addEventListener("click", () => {
+    const expanded = infoButton.getAttribute("aria-expanded") === "true";
+    infoButton.setAttribute("aria-expanded", String(!expanded));
+    infoPanel.hidden = expanded;
+  });
+
+  memberSelect.addEventListener("change", async () => {
+    if (!demoMode) return;
+    token = `demo-${memberSelect.value}`;
+    sessionStorage.setItem("token", token);
+    try {
+      await loadChat();
+    } catch (error) {
+      showNotice(error.message);
+    }
+  });
+
+  api("config")
+    .then((config) => {
+      demoMode = Boolean(config.demo);
+      if (demoMode && !token) {
+        token = "demo-alex";
+      }
+      return loadChat();
+    })
+    .catch((error) => {
+      if (!token) {
+        showAuthenticationPrompt();
+      } else {
+        showNotice(error.message);
+      }
+    });
+}
+
+boot();
