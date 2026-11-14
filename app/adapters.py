@@ -1,6 +1,6 @@
 """Future providers must verify webhook signatures and map external identities first."""
 from dataclasses import dataclass, field
-from typing import Callable, Protocol
+from typing import Any, Callable, Protocol
 
 @dataclass(frozen=True)
 class ChatEnvelope:
@@ -9,7 +9,7 @@ class ChatEnvelope:
     image: bytes | None = None
     mime_type: str = 'image/png'
     actor_name: str = ''
-    history: list[dict[str, str]] = field(default_factory=list)
+    history: list[dict[str, Any]] = field(default_factory=list)
     search: Callable[[str], dict] | None = None
 
 class ChatAdapter(Protocol):
