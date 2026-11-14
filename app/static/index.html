@@ -1,41 +1,54 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f8fafd">
-  <title>Montreal weekend · Chat</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f7f9" />
+  <title>SplitSmart Group Chat</title>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="chat-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-    <span class="topbar-title">Chat</span>
-    <div class="account-avatar" id="accountAvatar" aria-label="Your profile">A</div>
-  </header>
+  <main class="messages-window">
+    <section class="chat-panel" aria-label="Group chat">
+      <header class="chat-toolbar">
+        <div class="chat-toolbar-row">
+          <div id="group-participants" class="group-participants" aria-label="People in this chat"></div>
+          <button
+            id="group-info-button"
+            class="group-info-button"
+            type="button"
+            aria-label="Show group chat information"
+            aria-expanded="false"
+            aria-controls="group-info"
+          >i</button>
+        </div>
+        <div id="chat-title" class="chat-group-title">Montreal weekend</div>
+        <div id="group-info" class="group-info" hidden>
+          <div class="group-info-heading">People in this chat</div>
+          <div id="group-info-members" class="group-info-members"></div>
+          <label id="demo-member-switch" class="demo-member-switch" hidden>
+            Send as
+            <select id="demo-member-select" aria-label="Send messages as"></select>
+          </label>
+        </div>
+      </header>
 
-  <main class="chat-shell">
-    <header class="conversation-header">
-      <div class="group-avatar" aria-hidden="true"><span>M</span></div>
-      <div class="conversation-title">
-        <h1>Montreal weekend</h1>
-        <p id="participants">Group chat</p>
+      <div id="message-log" class="message-log" aria-label="Group messages" aria-live="polite">
+        <div class="loading-message">Loading conversation…</div>
       </div>
-      <div class="header-members" id="headerMembers" aria-label="Chat members"></div>
-    </header>
 
-    <section class="conversation" aria-label="Group conversation">
-      <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
       <div id="notice" class="notice" role="status" aria-live="polite"></div>
-      <form id="chatForm" class="composer">
-        <label class="sr-only" for="message">Message the group</label>
-        <textarea id="message" rows="1" maxlength="4000" required placeholder="Message the group"></textarea>
-        <button id="sendButton" type="submit" aria-label="Send message" title="Send message">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.2 21 12 3.4 3.8 3 10.2l12.5 1.8L3 13.8l.4 6.4Z"></path></svg>
-        </button>
+
+      <form id="chat-form" class="composer">
+        <div class="composer-plus" aria-hidden="true">+</div>
+        <div class="composer-field">
+          <textarea id="message-input" rows="1" placeholder="iMessage" aria-label="Message"></textarea>
+        </div>
+        <button class="send-button" type="submit" aria-label="Send message" disabled>↑</button>
       </form>
     </section>
   </main>
+
   <script src="/app.js"></script>
 </body>
 </html>
