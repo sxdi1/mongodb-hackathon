@@ -1,4 +1,4 @@
-import os, json, base64, secrets
+import logging, os, json, base64, secrets, re
 from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -13,6 +13,7 @@ from .adapters import WebAdapter
 from . import agent
 from .search import search_venues
 
+logger=logging.getLogger(__name__)
 load_dotenv()
 DEMO=os.getenv('DEMO_MODE','true').lower()=='true'
 TOKENS=json.loads(os.getenv('AUTH_TOKENS','{}'))
@@ -77,14 +78,24 @@ def chat(body:Chat,who=Depends(actor)):
     with app.state.store.transaction() as d:
         history=[
             dict(
+                id=message['id'],
                 actor=message['actor'],
                 name='Bouncer' if message['actor']=='bouncer' else find(d,'members',message['actor'])['name'],
                 text=message['text'],
+                extraction=message.get('extraction'),
+                reply_context=message.get('reply_context'),
             )
             for message in d['conversations'][-20:]
         ]
         actor_name=find(d,'members',who)['name']
-        d['conversations'].append(dict(id=uid(),actor=who,text=body.text,time=now(),has_image=bool(image)))
+        user_message_id=uid()
+        d['conversations'].append(dict(
+            id=user_message_id,
+            actor=who,
+            text=body.text,
+            time=now(),
+            has_image=bool(image),
+        ))
     def submit(payload):
         # Image-derived venue identity is not verification. No model-supplied provenance.
         if image: payload['venue_id']=None
@@ -99,12 +110,52 @@ def chat(body:Chat,who=Depends(actor)):
         history=history,
         search=search,
     ))
-    try: result=agent.run(envelope,submit)
-    except Exception:
-        result={'reply':'Sorry, I couldn’t work that out just now. Could you try describing the idea another way?','tools':[]}
-        with app.state.store.transaction() as d: event(d,who,'agent.error',{'message':'Provider/input failure; details withheld'})
+    try:
+        result=agent.run(envelope,submit)
+    except Exception as error:
+        detail=str(error)
+        api_key=os.getenv('GEMINI_API_KEY','')
+        if api_key:
+            detail=detail.replace(api_key,'[redacted]')
+        detail=re.sub(r'AIza[0-9A-Za-z_-]{20,}','[redacted]',detail)
+        detail=re.sub(r'(?i)(api[_ -]?key|authorization)(["\s:=]+)[^\s,;]+',r'\1\2[redacted]',detail)
+        logger.error(
+            'Agent request failed (actor=%s, mode=%s, type=%s): %s',
+            who,
+            os.getenv('AGENT_MODE','mock'),
+            type(error).__name__,
+            detail[:400] or 'No error detail',
+        )
+        try:
+            result=agent.fallback(envelope)
+        except Exception:
+            logger.exception('Local agent fallback failed (actor=%s)',who)
+            raise
+        with app.state.store.transaction() as d:
+            event(d,who,'agent.error',{
+                'error_type':type(error).__name__,
+                'mode':os.getenv('AGENT_MODE','mock'),
+                'message':'Provider failure; a local conversational reply was used',
+            })
     with app.state.store.transaction() as d:
-        d['conversations'].append(dict(id=uid(),actor='bouncer',text=result['reply'],time=now(),has_image=False))
+        if result.get('extraction'):
+            user_message=next(message for message in d['conversations'] if message['id']==user_message_id)
+            extraction=result['extraction']
+            extraction.setdefault('source_message_id',user_message_id)
+            extraction.setdefault('reported_by',who)
+            extraction['updated_by']=who
+            user_message['extraction']=extraction
+        reply_context=None
+        if (result.get('extraction') or {}).get('status')=='needs_clarification':
+            reply_context={'kind':'expense_mention','message_id':user_message_id}
+        d['conversations'].append(dict(
+            id=uid(),
+            actor='bouncer',
+            text=result['reply'],
+            time=now(),
+            has_image=False,
+            reply_context=reply_context,
+        ))
     return result
 
 @app.post('/api/vote')

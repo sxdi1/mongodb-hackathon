@@ -5,6 +5,7 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
 
 let token = sessionStorage.getItem('token') || '';
 let state;
+const EMPTY_CHAT_MARKER = '__empty__';
 
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, {
@@ -57,10 +58,30 @@ function actorDetails(actor) {
   };
 }
 
+function visibleMessages() {
+  const key = `splitsmart-chat-cleared:${state.me.id}`;
+  const marker = localStorage.getItem(key);
+  if (!marker) return { messages:state.conversations, cleared:false };
+  if (marker === EMPTY_CHAT_MARKER) return { messages:state.conversations, cleared:true };
+  const markerIndex = state.conversations.findIndex(message => message.id === marker);
+  if (markerIndex < 0) {
+    localStorage.removeItem(key);
+    return { messages:state.conversations, cleared:false };
+  }
+  return { messages:state.conversations.slice(markerIndex + 1), cleared:true };
+}
+
 function renderMessages() {
-  const messages = state.conversations.length
-    ? state.conversations
-    : [{ actor: 'bouncer', text: 'Hey, everyone! I’m Bouncer, your planning buddy. What sounds fun for the weekend?', time: new Date().toISOString() }];
+  const view = visibleMessages();
+  const messages = view.messages.length
+    ? view.messages
+    : view.cleared
+      ? []
+      : [{ actor: 'bouncer', text: 'Hey, everyone! I’m Bouncer, your planning buddy. What sounds fun for the weekend?', time: new Date().toISOString() }];
+  if (!messages.length) {
+    $('#messages').innerHTML = '<p class="empty-chat">Chat cleared from this browser. New messages will appear here.</p>';
+    return;
+  }
   let previousDate = '';
   const html = messages.map(message => {
     const day = dateLabel(message.time);
@@ -164,6 +185,23 @@ $('#message').addEventListener('keydown', event => {
 $('#message').addEventListener('input', event => {
   event.target.style.height = 'auto';
   event.target.style.height = `${Math.min(event.target.scrollHeight, 140)}px`;
+});
+
+$('#clearChatButton').addEventListener('click', () => {
+  if (!state) return;
+  const confirmed = window.confirm(
+    'Clear the conversation from this browser? This does not delete messages for other group members.'
+  );
+  if (!confirmed) return;
+  const marker = state.conversations.at(-1)?.id || EMPTY_CHAT_MARKER;
+  try {
+    localStorage.setItem(`splitsmart-chat-cleared:${state.me.id}`, marker);
+  } catch (error) {
+    showNotice(`Could not clear this browser's chat view: ${error.message}`);
+    return;
+  }
+  renderMessages();
+  showNotice('Chat cleared from this browser. Other members can still see the conversation.');
 });
 
 (async () => {

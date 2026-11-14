@@ -68,6 +68,165 @@ def test_chat_is_conversational_and_includes_recent_context(client,monkeypatch):
     assert seen['actor_name']=='Alex'
     assert [message['actor'] for message in seen['history']]==['alex','bouncer']
 
+def test_chat_uses_conversational_fallback_and_logs_provider_failure(client,monkeypatch,caplog):
+    from app import main
+    monkeypatch.setenv('AGENT_MODE','gemini')
+    monkeypatch.setenv('GEMINI_API_KEY','test-secret-key')
+    def fail_agent(*args):
+        raise RuntimeError('Gemini request for test-secret-key failed with 503')
+    monkeypatch.setattr(main.agent,'run',fail_agent)
+
+    response=client.post(
+        '/api/chat',
+        headers=h(),
+        json={'text':'Any ideas for the weekend?'},
+    ).json()
+
+    assert response['agent_status']=='fallback'
+    assert 'trouble reaching the AI service' in response['reply']
+    assert 'food, an activity, or a bit of both' in response['reply']
+    assert 'Sorry, I couldn’t work that out just now' not in response['reply']
+    assert 'RuntimeError' in caplog.text
+    assert '503' in caplog.text
+    assert 'test-secret-key' not in caplog.text
+
+def test_chat_expense_extraction_survives_gemini_failure(client,monkeypatch):
+    from app import main
+    monkeypatch.setenv('AGENT_MODE','gemini')
+    monkeypatch.setattr(main.agent,'run',lambda *args: (_ for _ in ()).throw(RuntimeError('provider unavailable')))
+
+    response=client.post(
+        '/api/chat',
+        headers=h(),
+        json={'text':'We paid $25 for lunch'},
+    ).json()
+
+    assert response['agent_status']=='fallback'
+    assert response['extraction']['amount_cents']==2500
+    assert response['extraction']['description']=='lunch'
+    state=client.get('/api/state',headers=h()).json()
+    assert state['conversations'][0]['extraction']['amount_cents']==2500
+
+def test_chat_extracts_and_persists_structured_expense_mention(client):
+    response=client.post(
+        '/api/chat',
+        headers=h(),
+        json={'text':"We paid $42.50 for dinner at Joe's yesterday"},
+    ).json()
+
+    assert response['extraction']=={
+        'schema_version':1,
+        'kind':'expense_mention',
+        'status':'captured',
+        'description':'dinner',
+        'merchant':"Joe's",
+        'amount_cents':4250,
+        'currency':'CAD',
+        'currency_source':'group_default',
+        'occurred_on_text':'yesterday',
+        'items':[],
+        'missing_fields':[],
+        'source_message_id':client.get('/api/state',headers=h()).json()['conversations'][0]['id'],
+        'reported_by':'alex',
+        'updated_by':'alex',
+    }
+    assert "haven't added a shared expense yet" in response['reply']
+    state=client.get('/api/state',headers=h()).json()
+    assert state['conversations'][0]['actor']=='alex'
+    assert state['conversations'][0]['extraction']==response['extraction']
+    assert state['expenses']==[]
+
+def test_expense_clarification_merges_with_pending_chat_extraction(client):
+    first=client.post('/api/chat',headers=h(),json={'text':'It cost $42.50'}).json()
+    assert first['extraction']['status']=='needs_clarification'
+    assert first['extraction']['missing_fields']==['description']
+    assert 'What was that for?' in first['reply']
+
+    followup=client.post('/api/chat',headers=h('sara'),json={'text':'Dinner'}).json()
+    assert followup['extraction']['status']=='captured'
+    assert followup['extraction']['description']=='Dinner'
+    assert followup['extraction']['amount_cents']==4250
+    assert followup['extraction']['currency']=='CAD'
+    assert followup['extraction']['reported_by']=='alex'
+    assert followup['extraction']['updated_by']=='sara'
+
+def test_ordinary_chat_does_not_create_expense_extraction(client):
+    response=client.post('/api/chat',headers=h(),json={'text':'Hey, any ideas for the weekend?'}).json()
+    assert response['extraction'] is None
+    assert 'What sounds fun' in response['reply']
+
+def test_expense_currency_is_explicit_when_provided(client):
+    response=client.post('/api/chat',headers=h(),json={'text':'Lunch was USD 18.25'}).json()
+    assert response['extraction']['amount_cents']==1825
+    assert response['extraction']['currency']=='USD'
+    assert response['extraction']['currency_source']=='explicit'
+
+def test_expense_parser_handles_natural_cost_phrasing(client):
+    response=client.post(
+        '/api/chat',
+        headers=h(),
+        json={'text':'We got lunch and this ended up costing $18.99 at Cafe North'},
+    ).json()
+    assert response['extraction']['amount_cents']==1899
+    assert response['extraction']['description']=='lunch'
+    assert response['extraction']['merchant']=='Cafe North'
+
+def test_chat_does_not_parse_image_contents_in_this_stage(client):
+    import base64
+    response=client.post(
+        '/api/chat',
+        headers=h(),
+        json={'text':'What does this receipt say?','image_base64':base64.b64encode(b'\x89PNG\r\n\x1a\n').decode()},
+    ).json()
+    assert response['extraction'] is None
+    assert 'can’t read images yet' in response['reply']
+
+def test_gemini_expense_tool_validates_and_returns_structured_facts(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    import google.genai
+    from app.adapters import ChatEnvelope
+    from app import agent
+
+    args={
+        'description':'Dinner',
+        'merchant':"Joe's",
+        'amount_cents':4250,
+        'currency':None,
+        'occurred_on_text':'yesterday',
+        'items':[],
+    }
+    tool_call=SimpleNamespace(
+        function_call=SimpleNamespace(name='capture_expense_details',args=args)
+    )
+    tool_response=SimpleNamespace(
+        candidates=[SimpleNamespace(content=SimpleNamespace(parts=[tool_call]))],
+        text=None,
+    )
+    final_response=SimpleNamespace(
+        candidates=[SimpleNamespace(content=SimpleNamespace(parts=[]))],
+        text="Dinner at Joe's was CAD 42.50. Was that the full total?",
+    )
+    models=SimpleNamespace(generate_content=MagicMock(side_effect=[tool_response,final_response]))
+    monkeypatch.setattr(google.genai,'Client',lambda **kwargs: SimpleNamespace(models=models))
+    monkeypatch.setenv('AGENT_MODE','gemini')
+    monkeypatch.setenv('GEMINI_API_KEY','test-key')
+
+    result=agent.run(
+        ChatEnvelope(actor='alex',actor_name='Alex',text="Dinner at Joe's cost $42.50"),
+        lambda payload: pytest.fail('Expense capture must not create a proposal'),
+    )
+
+    assert result['reply']==final_response.text
+    assert result['extraction']['amount_cents']==4250
+    assert result['extraction']['currency']=='CAD'
+    assert result['extraction']['currency_source']=='group_default'
+    declaration=models.generate_content.call_args.kwargs['config'].tools[0].function_declarations
+    assert 'capture_expense_details' in {tool.name for tool in declaration}
+    for tool in declaration:
+        assert 'anyOf' not in str(tool.parameters_json_schema)
+        assert '$defs' not in str(tool.parameters_json_schema)
+
 def test_unverified_claims_review(client):
     p=plan();p['venue_id']=None;p['claims']=['halal','vegetarian','nut-free']
     r=post(client,p);assert r['decision']['outcome']=='review'
@@ -145,4 +304,5 @@ def test_ui_served(client):
     assert response.status_code==200
     assert 'Montreal weekend' in response.text
     assert 'nav' not in response.text and '<aside' not in response.text
+    assert 'Clear chat from this browser' in response.text
     assert client.get('/app.js').status_code==200

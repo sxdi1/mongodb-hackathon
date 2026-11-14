@@ -35,6 +35,18 @@ class Proposal(Strict):
             raise ValueError('Use timezone-aware start/end, end after start')
         return self
 
+class ExpenseLine(Strict):
+    description: str = Field(min_length=1, max_length=200)
+    amount_cents: int | None = Field(default=None, ge=0, le=100000000)
+
+class ExpenseMention(Strict):
+    description: str | None = Field(default=None, max_length=200, description='Expense or purchase description stated in chat')
+    merchant: str | None = Field(default=None, max_length=200, description='Merchant explicitly named in chat')
+    amount_cents: int | None = Field(default=None, ge=0, le=100000000, description='Total amount stated, as integer cents; for example $12.34 is 1234')
+    currency: str | None = Field(default=None, pattern=r'^[A-Z]{3}$', description='ISO 4217 currency explicitly stated, such as CAD or USD; leave null if unstated')
+    occurred_on_text: str | None = Field(default=None, max_length=80, description='Date or relative date exactly as stated, not inferred')
+    items: list[ExpenseLine] = Field(default_factory=list, max_length=50)
+
 class Chat(Strict):
     text: str = Field(min_length=1, max_length=4000)
     image_base64: str | None = Field(default=None, max_length=2800000)
