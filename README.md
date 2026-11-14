@@ -1,0 +1,85 @@
+# SplitSmart Bouncer
+
+A hackathon group-trip coordinator: FastAPI, optional MongoDB Atlas persistence, a bounded Gemini tool-calling agent, and a responsive web chat with a decision board and audit replay.
+
+## Run locally
+
+Python 3.12+ recommended. From this directory:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+# Only if .env does not already exist:
+Copy-Item .env.example .env
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open http://127.0.0.1:8000. API docs: http://127.0.0.1:8000/docs. Linux/macOS: activate with `source .venv/bin/activate`.
+
+The delivered local `.env` contains the supplied Atlas URI, but starts in SQLite/mock mode so a demo can run without cloud access. It is ignored by Git and excluded from the ZIP. Do not overwrite it with the example. Rotate the password shared in chat. No secrets belong in commit messages, screenshots, or logs.
+
+## What works
+
+- Three seeded members with private editable boundaries, transport modes, and total budgets; organizer-controlled versioned group policy.
+- Text chat, structured proposals, PNG/JPEG attachments up to 2 MB, and a modular authenticated chat envelope.
+- Deterministic tag, dietary evidence, transport, per-person cap, cumulative budget, and schedule checks. Scheduling uses explicit timezone offsets and a configurable travel buffer; it does not query live routes or opening hours.
+- Eligible proposals go to one ballot round. Each member has one replaceable vote. All members must vote; organizer closes. Most votes wins, ties use lowest cost then earliest submission then ID. The winner is rechecked against current policy and itinerary.
+- Equal expense splitting in integer CAD cents; sorted member IDs receive remainder cents deterministically. Submitter is payer. Every debtor and payer separately attest sent/received. No payment API, refund, bank verification, or money movement exists.
+- Simulated ticket cancellation requires an explicit owner action. Real tickets are blocked, even with approval. There is no live cancellation integration.
+- `policies`, `decisions`, `auditEvents`, `groups`, `members`, `venues`, `proposals`, `votes`, `expenses`, `payments`, `tickets`, `conversations` collections in Atlas mode.
+
+## Demo (about three minutes)
+
+1. Open **My boundaries** as Alex. Switch identities to inspect Sara's halal requirement and Dev's vegetarian/nut-free requirements. Profiles are seeded for quick demos; edit and save them to demonstrate onboarding.
+2. Send **add $45 tequila**. See BLOCKED and the corresponding policy decision in **Courtroom replay**.
+3. Use **Propose a plan**, leave evidence as unverified, and claim halal. See REVIEW: claims are not facts.
+4. Send **propose Garden Table**. This fictional fixture has explicitly labeled demo evidence. Vote as Alex, Sara, and Dev, then close the ballot as Alex. The plan becomes accepted.
+5. Propose another plan at the same time. It is blocked by the travel/schedule gate.
+6. Submit an **Expense** for Garden Table, e.g. CAD 90.01. Vote with all identities and close. Open **Shared expenses** and switch identities to acknowledge sent and received separately. This records real expenses entered by members without executing payments.
+7. Approve the simulated ticket cancellation as Alex. Inspect replay.
+
+For an automated expense flow against a fresh running server: `python scripts/demo.py`. It deliberately writes demo records. To start over in SQLite mode, stop the server and rename `splitsmart.sqlite`; the next start seeds a fresh database.
+
+## Atlas setup
+
+1. Set `STORAGE=mongo` in `.env`; provide `MONGODB_URI` and a dedicated `MONGODB_DB=splitsmart` database. Do not use a production database for this demo.
+2. Allow your development machine's IP in Atlas network access. Use a dedicated database user. Keep the URI out of source control.
+3. Startup creates collections, unique ID indexes, and strict JSON Schema validators. It needs collection creation and `collMod` privileges. For deployment, provision schema with an administrator and separate that responsibility from the runtime account (a follow-up hardening task).
+4. Atlas/replica-set transactions are required. Domain changes, decisions, and audit events commit together. A group revision write serializes concurrent mutations; write conflicts fail rather than silently accept stale policy. Retry the user action after refreshing. The local SQLite repository uses `BEGIN IMMEDIATE` for equivalent serialized demo operations.
+
+MongoDB validators enforce document structure; Python evaluates cross-document policy. The agent has no direct database tool. Audit, decision, and policy records have no application update/delete endpoints. Database administrators can still change them: **this is not immutable storage or an audit-proof ledger**. Use restrictive roles, backups, external audit exports, and retention controls for stronger evidence preservation.
+
+## Gemini setup
+
+Set `AGENT_MODE=gemini`, `GEMINI_API_KEY`, and a `GEMINI_MODEL` available to your Google project. The example model is configurable; access/availability is not assumed. The Google Gen AI SDK sends user text and optional image bytes to Gemini. Do not attach sensitive receipts without consent.
+
+The explicit loop permits only the `propose` tool, validates arguments with Pydantic, and allows one successful proposal per request with at most four model rounds. Tool output is fed back to Gemini. Identity comes from the bearer token, not model arguments. Model prose can be wrong: proposal cards and policy decisions are authoritative. Screenshots always lose any inferred venue ID and require evidence review; images are not persisted in this MVP. Mock mode does not pretend to perform OCR.
+
+## Evidence and limitations
+
+- Garden Table is fictional. Its seed evidence is enabled only in demo mode. No live venue discovery, halal certification, allergen certification, receipt OCR in mock mode, or human evidence-verification workflow is implemented. Unknown compliance requires review and cannot win a vote.
+- User/model categories and tags are fallible. The deterministic gate verifies supplied structured data plus a small conservative keyword check; it cannot guarantee detection of misclassified, hidden, or omitted ingredients. This is not a guarantee of dietary or medical safety. Add authenticated curated venue facts and human review before real use.
+- Single seeded group, three fixed members, equal all-member splits, one ballot at a time, CAD only. Member signup/invites, multi-group isolation, arbitrary split weights, abstention/deadlines, notifications, and live chat adapters are extension points.
+- Budget accounting conservatively reserves accepted plan amounts plus approved expenses. Recording an expense for an already reserved plan can count twice; expense-to-plan reconciliation is not implemented.
+- Accepted plans are not automatically cancelled when a profile/policy changes; new submissions and ballot resolution use current constraints.
+- Replay displays the last 100 events/decisions via refresh; this MVP does not implement Change Streams. Health restrictions are hidden in other members' profiles; decisions reveal only generic conflicts. Group rules, shared messages, expense records, and proposals are visible to all members.
+- `DEMO_MODE=true` exposes convenient demo identity switching. Bind to localhost. Outside demo mode, set a JSON `AUTH_TOKENS` map from long random secrets to seeded member IDs. This is bearer-token MVP authentication, not production identity management. Add TLS, OIDC, rate limits, retention and privacy controls before deployment.
+- Google Chat/Discord must verify signatures, map external identities/group membership, and deduplicate deliveries before constructing `ChatEnvelope`. The protocol is in `app/adapters.py`; no unsigned webhook is exposed.
+
+## Tests
+
+```powershell
+python -m pytest -q
+python -m unittest discover -s tests -p test_core.py -v
+```
+
+API tests cover authentication, privacy, malicious requests, evidence review, budgets, scheduling, stale policies, vote replacement/ties, cent conservation, payment-party authorization/idempotency, cancellation, validation, rollback, and static assets. Offline domain tests separately exercise the policy and transaction core. See `VALIDATION.md` for the actual checks performed in the build environment; live Atlas/Gemini require a credentialed integration test.
+
+## Architecture
+
+`Web / future authenticated adapter → agent proposes → Pydantic → deterministic service → transactional repository → decision + audit + state → web replay`
+
+Read-only UI refreshes currently acquire the same repository transaction as writes for simplicity. MongoDB startup migration and all-collection loading are hackathon-scale choices; use indexed repository queries, pagination and migration tooling before scaling.
+
+API references used: [Google Gen AI SDK](https://googleapis.github.io/python-genai/), [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling), [MongoDB schema validation](https://www.mongodb.com/docs/manual/core/schema-validation/update-schema-validation/).

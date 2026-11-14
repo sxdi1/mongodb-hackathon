@@ -1,0 +1,101 @@
+{
+  "groups": [
+    {
+      "id": "montreal",
+      "name": "Montreal weekend",
+      "revision": 0,
+      "currency": "CAD"
+    }
+  ],
+  "members": [
+    {
+      "id": "alex",
+      "name": "Alex",
+      "requirements": [],
+      "transport": [
+        "walk",
+        "bus",
+        "train"
+      ],
+      "budget_cents": 12000,
+      "onboarded": true
+    },
+    {
+      "id": "sara",
+      "name": "Sara",
+      "requirements": [
+        "halal"
+      ],
+      "transport": [
+        "walk",
+        "bus",
+        "train"
+      ],
+      "budget_cents": 12000,
+      "onboarded": true
+    },
+    {
+      "id": "dev",
+      "name": "Dev",
+      "requirements": [
+        "vegetarian",
+        "nut-free"
+      ],
+      "transport": [
+        "walk",
+        "bus",
+        "train"
+      ],
+      "budget_cents": 12000,
+      "onboarded": true
+    }
+  ],
+  "policies": [
+    {
+      "id": "policy-1",
+      "version": 1,
+      "requirements": [
+        "halal"
+      ],
+      "transport": [
+        "walk",
+        "bus",
+        "train"
+      ],
+      "cap_cents": 5000,
+      "blocked_tags": [
+        "alcohol",
+        "pork"
+      ]
+    }
+  ],
+  "venues": [
+    {
+      "id": "demo-garden",
+      "name": "Garden Table (fictional)",
+      "facts": [
+        "halal",
+        "vegetarian",
+        "nut-free"
+      ],
+      "tags": [],
+      "source": "Curated DEMO fixture; not real venue verification",
+      "demo": true
+    }
+  ],
+  "tickets": [
+    {
+      "id": "demo-ticket",
+      "owner": "alex",
+      "simulated": true,
+      "status": "booked"
+    }
+  ],
+  "proposals": [],
+  "votes": [],
+  "expenses": [],
+  "payments": [],
+  "decisions": [],
+  "auditEvents": [],
+  "conversations": []
+}
