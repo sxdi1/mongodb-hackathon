@@ -1,55 +1,39 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#242526" />
-  <title>SplitSmart Messages</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f7f9" />
+  <title>SplitSmart Group Chat</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <main class="messages-window">
-    <aside class="sidebar">
-      <div class="window-controls" aria-hidden="true">
-        <span class="traffic-light red"></span>
-        <span class="traffic-light yellow"></span>
-        <span class="traffic-light green"></span>
-        <span class="sidebar-compose">↗</span>
-      </div>
-
-      <div class="search-wrap">
-        <span class="search-icon">⌕</span>
-        <input id="conversation-search" type="search" placeholder="Search" aria-label="Search conversations" />
-      </div>
-
-      <section class="pinned-section" aria-label="Pinned contacts">
-        <div id="pinned-contacts" class="pinned-contacts">
-          <div class="pinned-placeholder">Loading contacts…</div>
-        </div>
-      </section>
-
-      <section class="conversation-section" aria-label="Conversations">
-        <div id="conversation-list" class="conversation-list">
-          <div class="conversation-placeholder">Loading conversations…</div>
-        </div>
-      </section>
-      <div class="sidebar-footer">SplitSmart</div>
-    </aside>
-
-    <section class="chat-panel">
+    <section class="chat-panel" aria-label="Group chat">
       <header class="chat-toolbar">
-        <div class="chat-recipient">
-          <span class="recipient-prefix">To:</span>
-          <strong id="chat-title">Montreal weekend</strong>
+        <div class="chat-toolbar-row">
+          <div id="group-participants" class="group-participants" aria-label="People in this chat"></div>
+          <button
+            id="group-info-button"
+            class="group-info-button"
+            type="button"
+            aria-label="Show group chat information"
+            aria-expanded="false"
+            aria-controls="group-info"
+          >i</button>
         </div>
-        <div class="toolbar-actions" aria-hidden="true">
-          <span class="toolbar-icon video-icon">▣</span>
-          <span class="toolbar-icon info-icon">ⓘ</span>
+        <div id="chat-title" class="chat-group-title">Montreal weekend</div>
+        <div id="group-info" class="group-info" hidden>
+          <div class="group-info-heading">People in this chat</div>
+          <div id="group-info-members" class="group-info-members"></div>
+          <label id="demo-member-switch" class="demo-member-switch" hidden>
+            Send as
+            <select id="demo-member-select" aria-label="Send messages as"></select>
+          </label>
         </div>
       </header>
 
-      <div id="message-log" class="message-log" aria-live="polite">
+      <div id="message-log" class="message-log" aria-label="Group messages" aria-live="polite">
         <div class="loading-message">Loading conversation…</div>
       </div>
 
@@ -58,11 +42,9 @@
       <form id="chat-form" class="composer">
         <div class="composer-plus" aria-hidden="true">+</div>
         <div class="composer-field">
-          <textarea id="message-input" rows="1" placeholder="iMessage" aria-label="iMessage"></textarea>
-          <span class="audio-wave" aria-hidden="true">▥</span>
+          <textarea id="message-input" rows="1" placeholder="iMessage" aria-label="Message"></textarea>
         </div>
-        <div class="emoji-button" aria-hidden="true">☺</div>
-        <button class="send-button" type="submit" aria-label="Send message">↑</button>
+        <button class="send-button" type="submit" aria-label="Send message" disabled>↑</button>
       </form>
     </section>
   </main>

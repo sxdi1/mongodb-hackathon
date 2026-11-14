@@ -1,6 +1,6 @@
-
 let token = sessionStorage.getItem("token") || "";
 let state;
+let demoMode = false;
 
 const defaultAvatars = {
   Alex: "https://randomuser.me/api/portraits/men/32.jpg",
@@ -38,101 +38,95 @@ function fallbackAvatar(name) {
   return `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name || "User")}`;
 }
 
+function avatarFor(name, customAvatar) {
+  return customAvatar || defaultAvatars[name] || fallbackAvatar(name);
+}
+
+function avatarMarkup(name, avatar, className) {
+  const fallback = fallbackAvatar(name);
+  return `<img class="${className}" src="${escapeHTML(avatar)}" alt="${escapeHTML(name)}" onerror="this.onerror=null;this.src='${escapeHTML(fallback)}'">`;
+}
+
 function actorDetails(actor) {
   if (actor === "bouncer") {
     return {
-      name: "Bouncer",
+      name: "SplitSmart Bouncer",
       avatar: defaultAvatars.Bouncer,
       isBouncer: true,
     };
   }
 
   const member = state?.members?.find((item) => item.id === actor);
-
   if (member) {
     return {
       name: member.name || "Member",
-      avatar: member.avatar_url || defaultAvatars[member.name] || fallbackAvatar(member.name),
+      avatar: avatarFor(member.name, member.avatar_url),
       isBouncer: false,
     };
   }
 
   const name = actor || "Unknown";
-
   return {
     name,
-    avatar: defaultAvatars[name] || fallbackAvatar(name),
+    avatar: avatarFor(name),
     isBouncer: false,
   };
 }
 
-function renderPinnedContacts() {
-  const container = document.getElementById("pinned-contacts");
-  const members = (state?.members || []).slice(0, 3);
-
-  if (!members.length) {
-    container.innerHTML = `<div class="pinned-placeholder">No group members</div>`;
-    return;
-  }
-
-  container.innerHTML = members.map((member, index) => {
-    const name = member.name || "Member";
-    const avatar = member.avatar_url || defaultAvatars[name] || fallbackAvatar(name);
-
-    return `
-      <div class="pinned-contact ${index === 0 ? "active" : ""}">
-        <img class="pinned-avatar" src="${escapeHTML(avatar)}" alt="${escapeHTML(name)}">
-        <span class="pinned-name">${escapeHTML(name)}</span>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderConversationList() {
-  const container = document.getElementById("conversation-list");
-  const messages = state?.conversations || [];
-  const lastMessage = messages[messages.length - 1];
-  const actor = lastMessage ? actorDetails(lastMessage.actor) : null;
-  const preview = lastMessage?.text || "Start a conversation";
-  const groupName = state?.group?.name || state?.group_name || "Montreal weekend";
-
-  const firstMember = (state?.members || [])[0];
-
-  const avatar = firstMember
-    ? (firstMember.avatar_url || defaultAvatars[firstMember.name] || fallbackAvatar(firstMember.name))
-    : fallbackAvatar(groupName);
-
-  container.innerHTML = `
-    <div class="conversation-item selected" data-search="${escapeHTML(groupName.toLowerCase())}">
-      <span class="unread-dot"></span>
-      <img class="conversation-avatar" src="${escapeHTML(avatar)}" alt="">
-      <div class="conversation-copy">
-        <div class="conversation-topline">
-          <span class="conversation-name">${escapeHTML(groupName)}</span>
-          <span class="conversation-time">Now</span>
-        </div>
-        <div class="conversation-preview">${escapeHTML(actor ? `${actor.name}: ${preview}` : preview)}</div>
-      </div>
-    </div>
-  `;
-
-  const search = document.getElementById("conversation-search");
-
-  if (search) {
-    const item = container.querySelector(".conversation-item");
-    const query = search.value.trim().toLowerCase();
-
-    item.style.display = item.dataset.search.includes(query) || !query ? "flex" : "none";
-  }
-}
-
-function renderGroup() {
+function renderGroupHeader() {
+  const members = state?.members || [];
   const groupName = state?.group?.name || state?.group_name || "Montreal weekend";
 
   document.getElementById("chat-title").textContent = groupName;
+  document.getElementById("group-participants").innerHTML = members.map((member) => {
+    const name = member.name || "Member";
+    return `
+      <div class="group-participant">
+        ${avatarMarkup(name, avatarFor(name, member.avatar_url), "participant-avatar")}
+        <span>${escapeHTML(name)}</span>
+      </div>
+    `;
+  }).join("");
 
-  renderPinnedContacts();
-  renderConversationList();
+  document.getElementById("group-info-members").innerHTML = members.map((member) => {
+    const name = member.name || "Member";
+    return `
+      <div class="group-info-member">
+        ${avatarMarkup(name, avatarFor(name, member.avatar_url), "group-info-avatar")}
+        <span>${escapeHTML(name)}</span>
+      </div>
+    `;
+  }).join("");
+
+  const memberSwitch = document.getElementById("demo-member-switch");
+  const memberSelect = document.getElementById("demo-member-select");
+  memberSwitch.hidden = !demoMode;
+  if (demoMode) {
+    memberSelect.innerHTML = members.map((member) =>
+      `<option value="${escapeHTML(member.id)}">${escapeHTML(member.name)}</option>`
+    ).join("");
+    memberSelect.value = state?.me?.id || "";
+  }
+}
+
+function formatMessageTime(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return "";
+
+  const day = date.toDateString() === new Date().toDateString()
+    ? "Today"
+    : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+  const time = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+  return `${day} ${time}`;
+}
+
+function shouldShowTimestamp(messages, index) {
+  if (index === 0) return true;
+  const current = new Date(messages[index].time);
+  const previous = new Date(messages[index - 1].time);
+  return !Number.isNaN(current.getTime())
+    && !Number.isNaN(previous.getTime())
+    && (current.toDateString() !== previous.toDateString() || current - previous > 4 * 60 * 60 * 1000);
 }
 
 function renderMessages() {
@@ -149,35 +143,37 @@ function renderMessages() {
     const mine = message.actor === state?.me?.id;
     const previous = messages[index - 1];
     const sameSender = previous && previous.actor === message.actor;
-
     const classes = [
       "message-group",
       mine ? "mine" : "",
       actor.isBouncer ? "bouncer" : "",
     ].filter(Boolean).join(" ");
 
+    const timestamp = shouldShowTimestamp(messages, index)
+      ? `<div class="message-date">${escapeHTML(formatMessageTime(message.time))}</div>`
+      : "";
     const attachment = message.image
       ? `<img class="message-attachment" src="${escapeHTML(message.image)}" alt="Message attachment">`
       : "";
-
-    const avatar = sameSender
-      ? `<span class="message-avatar-spacer"></span>`
-      : `<img class="message-avatar" src="${escapeHTML(actor.avatar)}" alt="${escapeHTML(actor.name)}" onerror="this.onerror=null;this.src='${escapeHTML(fallbackAvatar(actor.name))}'">`;
+    const avatar = mine
+      ? ""
+      : sameSender
+        ? `<span class="message-avatar-spacer" aria-hidden="true"></span>`
+        : avatarMarkup(actor.name, actor.avatar, "message-avatar");
 
     return `
-      <div class="${classes}">
+      ${timestamp}
+      <article class="${classes}">
         ${!mine && !sameSender ? `<div class="message-sender">${escapeHTML(actor.name)}</div>` : ""}
-        ${actor.isBouncer && !sameSender ? `<div class="bouncer-tag">SPLITSMART BOUNCER</div>` : ""}
         <div class="message-line">
           ${avatar}
           <div class="message-bubble">${escapeHTML(message.text)}${attachment}</div>
         </div>
-      </div>
+      </article>
     `;
   }).join("");
 
   log.scrollTop = log.scrollHeight;
-  renderConversationList();
 }
 
 function showNotice(message) {
@@ -189,35 +185,24 @@ function showAuthenticationPrompt() {
   notice.innerHTML = "";
 
   const prompt = document.createElement("span");
-  prompt.textContent = "Enter member access token: ";
+  prompt.textContent = "Enter member access token:";
 
   const input = document.createElement("input");
+  input.className = "auth-input";
   input.placeholder = "Access token";
-  input.style.margin = "0 8px";
-  input.style.padding = "5px 8px";
-  input.style.borderRadius = "7px";
-  input.style.border = "1px solid #666";
-  input.style.background = "#303033";
-  input.style.color = "#fff";
+  input.setAttribute("aria-label", "Access token");
 
   const button = document.createElement("button");
+  button.className = "auth-button";
   button.textContent = "Continue";
-  button.style.padding = "5px 10px";
-  button.style.border = "0";
-  button.style.borderRadius = "7px";
-  button.style.background = "#1685f8";
-  button.style.color = "#fff";
-  button.style.cursor = "pointer";
 
   notice.append(prompt, input, button);
 
   button.addEventListener("click", async () => {
     token = input.value.trim();
-
     if (!token) return;
 
     sessionStorage.setItem("token", token);
-
     try {
       await loadChat();
     } catch (error) {
@@ -228,8 +213,7 @@ function showAuthenticationPrompt() {
 
 async function loadChat() {
   state = await api("state");
-
-  renderGroup();
+  renderGroupHeader();
   renderMessages();
   showNotice("");
 }
@@ -239,7 +223,6 @@ async function sendMessage(event) {
 
   const input = document.getElementById("message-input");
   const text = input.value.trim();
-
   if (!text) return;
 
   const button = document.querySelector(".send-button");
@@ -247,17 +230,14 @@ async function sendMessage(event) {
 
   try {
     await api("chat", { text });
-
     input.value = "";
     input.style.height = "auto";
-
     document.querySelector(".composer").classList.remove("has-text");
-
     await loadChat();
   } catch (error) {
     showNotice(error.message);
   } finally {
-    button.disabled = false;
+    button.disabled = !input.value.trim();
     input.focus();
   }
 }
@@ -266,17 +246,18 @@ function boot() {
   const form = document.getElementById("chat-form");
   const input = document.getElementById("message-input");
   const composer = document.querySelector(".composer");
-  const search = document.getElementById("conversation-search");
+  const infoButton = document.getElementById("group-info-button");
+  const infoPanel = document.getElementById("group-info");
+  const memberSelect = document.getElementById("demo-member-select");
 
   form.addEventListener("submit", sendMessage);
-
   input.addEventListener("input", () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 110)}px`;
-
-    composer.classList.toggle("has-text", Boolean(input.value.trim()));
+    const hasText = Boolean(input.value.trim());
+    composer.classList.toggle("has-text", hasText);
+    document.querySelector(".send-button").disabled = !hasText;
   });
-
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -284,14 +265,29 @@ function boot() {
     }
   });
 
-  search.addEventListener("input", renderConversationList);
+  infoButton.addEventListener("click", () => {
+    const expanded = infoButton.getAttribute("aria-expanded") === "true";
+    infoButton.setAttribute("aria-expanded", String(!expanded));
+    infoPanel.hidden = expanded;
+  });
+
+  memberSelect.addEventListener("change", async () => {
+    if (!demoMode) return;
+    token = `demo-${memberSelect.value}`;
+    sessionStorage.setItem("token", token);
+    try {
+      await loadChat();
+    } catch (error) {
+      showNotice(error.message);
+    }
+  });
 
   api("config")
     .then((config) => {
-      if (config.demo && !token) {
+      demoMode = Boolean(config.demo);
+      if (demoMode && !token) {
         token = "demo-alex";
       }
-
       return loadChat();
     })
     .catch((error) => {
