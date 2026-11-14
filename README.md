@@ -1,6 +1,6 @@
 # SplitSmart Bouncer
 
-A hackathon group-trip coordinator: FastAPI, optional MongoDB Atlas persistence, a bounded Gemini tool-calling agent, and a responsive web chat with a decision board and audit replay.
+A hackathon group-trip coordinator: FastAPI, optional MongoDB Atlas persistence, a bounded Gemini tool-calling agent, and a single responsive group-chat interface. The planning agent participates in the conversation as **Bouncer**; the web UI has no dashboard, tabs, or side panels.
 
 ## Run locally
 
@@ -22,22 +22,18 @@ The delivered local `.env` contains the supplied Atlas URI, but starts in SQLite
 ## What works
 
 - Three seeded members with private editable boundaries, transport modes, and total budgets; organizer-controlled versioned group policy.
-- Text chat, structured proposals, PNG/JPEG attachments up to 2 MB, and a modular authenticated chat envelope.
+- A single-thread web chat with recent conversation context for Gemini; the authenticated chat API also accepts PNG/JPEG attachments up to 2 MB.
 - Deterministic tag, dietary evidence, transport, per-person cap, cumulative budget, and schedule checks. Scheduling uses explicit timezone offsets and a configurable travel buffer; it does not query live routes or opening hours.
 - Eligible proposals go to one ballot round. Each member has one replaceable vote. All members must vote; organizer closes. Most votes wins, ties use lowest cost then earliest submission then ID. The winner is rechecked against current policy and itinerary.
 - Equal expense splitting in integer CAD cents; sorted member IDs receive remainder cents deterministically. Submitter is payer. Every debtor and payer separately attest sent/received. No payment API, refund, bank verification, or money movement exists.
 - Simulated ticket cancellation requires an explicit owner action. Real tickets are blocked, even with approval. There is no live cancellation integration.
 - `policies`, `decisions`, `auditEvents`, `groups`, `members`, `venues`, `proposals`, `votes`, `expenses`, `payments`, `tickets`, `conversations` collections in Atlas mode.
 
-## Demo (about three minutes)
+## Chat demo
 
-1. Open **My boundaries** as Alex. Switch identities to inspect Sara's halal requirement and Dev's vegetarian/nut-free requirements. Profiles are seeded for quick demos; edit and save them to demonstrate onboarding.
-2. Send **add $45 tequila**. See BLOCKED and the corresponding policy decision in **Courtroom replay**.
-3. Use **Propose a plan**, leave evidence as unverified, and claim halal. See REVIEW: claims are not facts.
-4. Send **propose Garden Table**. This fictional fixture has explicitly labeled demo evidence. Vote as Alex, Sara, and Dev, then close the ballot as Alex. The plan becomes accepted.
-5. Propose another plan at the same time. It is blocked by the travel/schedule gate.
-6. Submit an **Expense** for Garden Table, e.g. CAD 90.01. Vote with all identities and close. Open **Shared expenses** and switch identities to acknowledge sent and received separately. This records real expenses entered by members without executing payments.
-7. Approve the simulated ticket cancellation as Alex. Inspect replay.
+The web app opens directly to the Montreal weekend group chat. Start with a natural message such as “Hey, what should we do this weekend?” The mock agent responds conversationally and recognizes a few demo ideas: “propose Garden Table,” “visit museum,” and “add $45 tequila.” The fictional Garden Table venue and all policy outcomes are clearly labeled by the agent. Set `AGENT_MODE=gemini` and configure a Gemini API key to use free-form conversation; recent chat turns are sent as context. The app does not show separate planning, expense, policy, or audit screens.
+
+The underlying API still supports proposal voting, expense acknowledgements, boundary updates, and simulated ticket actions. For an automated expense flow against a fresh running server: `python scripts/demo.py`. It deliberately writes demo records. To start over in SQLite mode, stop the server and rename `splitsmart.sqlite`; the next start seeds a fresh database.
 
 For an automated expense flow against a fresh running server: `python scripts/demo.py`. It deliberately writes demo records. To start over in SQLite mode, stop the server and rename `splitsmart.sqlite`; the next start seeds a fresh database.
 
@@ -54,7 +50,7 @@ MongoDB validators enforce document structure; Python evaluates cross-document p
 
 Set `AGENT_MODE=gemini`, `GEMINI_API_KEY`, and a `GEMINI_MODEL` available to your Google project. The example model is configurable; access/availability is not assumed. The Google Gen AI SDK sends user text and optional image bytes to Gemini. Do not attach sensitive receipts without consent.
 
-The explicit loop permits only the `propose` tool, validates arguments with Pydantic, and allows one successful proposal per request with at most four model rounds. Tool output is fed back to Gemini. Identity comes from the bearer token, not model arguments. Model prose can be wrong: proposal cards and policy decisions are authoritative. Screenshots always lose any inferred venue ID and require evidence review; images are not persisted in this MVP. Mock mode does not pretend to perform OCR.
+The explicit loop permits only the `propose` tool, validates arguments with Pydantic, and allows one successful proposal per request with at most four model rounds. Tool output is fed back to Gemini. Identity comes from the bearer token, not model arguments. Model prose can be wrong; deterministic server policy decisions are authoritative. Screenshots always lose any inferred venue ID and require evidence review; images are not persisted in this MVP. Mock mode does not pretend to perform OCR.
 
 ## Evidence and limitations
 

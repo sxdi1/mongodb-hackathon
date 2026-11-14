@@ -28,6 +28,22 @@ def test_injection_cannot_override_gate(client):
     assert r['tools'][0]['decision']['outcome']=='blocked'
     assert client.get('/api/state',headers=h()).json()['payments']==[]
 
+def test_chat_is_conversational_and_includes_recent_context(client,monkeypatch):
+    from app import main
+    original=main.agent.run
+    seen={}
+    def capture(envelope,submit):
+        seen['actor_name']=envelope.actor_name
+        seen['history']=envelope.history
+        return original(envelope,submit)
+    monkeypatch.setattr(main.agent,'run',capture)
+    greeting=client.post('/api/chat',headers=h(),json={'text':'Hey, any ideas?'}).json()
+    assert 'What sounds fun' in greeting['reply']
+    followup=client.post('/api/chat',headers=h(),json={'text':'Thanks!'}).json()
+    assert 'Anything else' in followup['reply']
+    assert seen['actor_name']=='Alex'
+    assert [message['actor'] for message in seen['history']]==['alex','bouncer']
+
 def test_unverified_claims_review(client):
     p=plan();p['venue_id']=None;p['claims']=['halal','vegetarian','nut-free']
     r=post(client,p);assert r['decision']['outcome']=='review'
@@ -101,6 +117,8 @@ def test_atomic_rollback(client):
     assert client.get('/api/state',headers=h()).json()['expenses']==[]
 
 def test_ui_served(client):
-    assert client.get('/').status_code==200
-    assert 'SplitSmart' in client.get('/').text
+    response=client.get('/')
+    assert response.status_code==200
+    assert 'Montreal weekend' in response.text
+    assert 'nav' not in response.text and '<aside' not in response.text
     assert client.get('/app.js').status_code==200

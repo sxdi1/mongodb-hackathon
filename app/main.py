@@ -73,16 +73,31 @@ def chat(body:Chat,who=Depends(actor)):
         except ValueError: raise HTTPException(422,'Invalid base64 image')
         valid=(body.mime_type=='image/png' and image.startswith(b'\x89PNG\r\n\x1a\n')) or (body.mime_type=='image/jpeg' and image.startswith(b'\xff\xd8\xff'))
         if not valid or len(image)>2_000_000: raise HTTPException(422,'Use a PNG/JPEG up to 2 MB')
-    envelope=WebAdapter().normalize(who,dict(text=body.text,image=image,mime_type=body.mime_type))
     with app.state.store.transaction() as d:
+        history=[
+            dict(
+                actor=message['actor'],
+                name='Bouncer' if message['actor']=='bouncer' else find(d,'members',message['actor'])['name'],
+                text=message['text'],
+            )
+            for message in d['conversations'][-20:]
+        ]
+        actor_name=find(d,'members',who)['name']
         d['conversations'].append(dict(id=uid(),actor=who,text=body.text,time=now(),has_image=bool(image)))
+    envelope=WebAdapter().normalize(who,dict(
+        text=body.text,
+        image=image,
+        mime_type=body.mime_type,
+        actor_name=actor_name,
+        history=history,
+    ))
     def submit(payload):
         # Image-derived venue identity is not verification. No model-supplied provenance.
         if image: payload['venue_id']=None
         with app.state.store.transaction() as d: return propose(d,who,payload,'screenshot inference' if image else 'text inference')
     try: result=agent.run(envelope,submit)
     except Exception:
-        result={'reply':'Agent unavailable or input invalid. Check existing proposal cards before retrying; use the Plan form.','tools':[]}
+        result={'reply':'Sorry, I couldn’t work that out just now. Could you try describing the idea another way?','tools':[]}
         with app.state.store.transaction() as d: event(d,who,'agent.error',{'message':'Provider/input failure; details withheld'})
     with app.state.store.transaction() as d:
         d['conversations'].append(dict(id=uid(),actor='bouncer',text=result['reply'],time=now(),has_image=False))

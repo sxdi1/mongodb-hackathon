@@ -1,8 +1,41 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SplitSmart Bouncer</title><link rel="stylesheet" href="/style.css"></head><body>
-<aside><a class="brand" href="/">S<span>SplitSmart<br><small>BOUNCER / GROUP COORDINATOR</small></span></a><div class="trip">YOUR SPACE<h2>Montreal weekend</h2><p>3 friends · CAD · America/Toronto</p></div><nav><button data-tab="chat" class="active">◌ Group chat</button><button data-tab="plan">＋ Propose a plan</button><button data-tab="money">↗ Shared expenses</button><button data-tab="setup">◎ My boundaries</button><button data-tab="replay">≡ Courtroom replay</button></nav><div class="identity"><label for="identity">Demo identity</label><select id="identity"><option value="alex">Alex · organizer</option><option value="sara">Sara</option><option value="dev">Dev</option></select><label for="token">Member access token</label><input id="token" type="password" placeholder="Bearer token"><button id="connect">Connect</button><p id="mode"></p></div><footer>Plans with guardrails.<br>No money moves here.</footer></aside>
-<main><header><div><span class="eyebrow">LESS GROUP-CHAT CHAOS</span><h1>Your weekend, together.</h1><p>Make a plan everyone can say yes to.</p></div><span class="pill">● Policy gate active</span></header><div id="notice" role="status" aria-live="polite"></div><div class="stats"><div><small>GROUP LIMIT</small><strong id="cap">—</strong></div><div><small>ACCEPTED PLANS</small><strong id="count">0</strong></div><div><small>EXPENSES TRACKED</small><strong id="total">$0.00</strong></div></div>
-<section id="chat" class="page"><div class="columns"><div class="panel"><div class="panelhead"><h2>Group conversation</h2><span>All together</span></div><div class="hint">Try “add $45 tequila”, “propose Garden Table”, or “visit museum”. Mock venues are fictional.</div><div id="messages" class="messages"></div><form id="chatForm"><label for="message">Message Bouncer</label><textarea id="message" required placeholder="@Bouncer, can we fit this into our trip?"></textarea><div class="row"><label class="upload">Attach screenshot<input id="image" type="file" accept="image/png,image/jpeg"></label><button class="primary">Send message ↗</button></div><small>Screenshots are inference, never verified venue facts. Gemini mode is needed to read pixels.</small></form></div><div class="panel"><div class="panelhead"><h2>Decision board</h2><button id="resolve">Close ballot</button></div><p class="hint">Everyone votes once per round. Ties: lower price, then earlier submission. Organizer closes the round.</p><div id="proposals"></div></div></div></section>
-<section id="plan" class="page" hidden><div class="panel narrow"><h2>Bring an idea to the table</h2><p>Every submission passes through the same server policy gate.</p><form id="planForm"><label>Title<input name="title" required maxlength="200" placeholder="Dinner at Garden Table"></label><div class="row"><label>Category<select name="category"><option value="food">Food</option><option value="activity">Activity</option><option value="transport">Transport</option><option value="expense">Expense</option></select></label><label>CAD amount<input name="amount" type="number" min="0" step="0.01" required value="30"></label></div><small>Per person for plans; total for an expense. Expense submitter is the payer.</small><label>Evidence<select name="venue_id"><option value="">Unverified / needs review</option value="demo-garden">Garden Table · fictional demo evidence</option></select></label><label>Tags (comma-separated)<input name="tags" placeholder="alcohol, pork"></label><label>Unverified dietary claims<input name="claims" placeholder="halal, vegetarian, nut-free"></label><label>Transport<select name="transport"><option>walk</option><option>bus</option><option>train</option><option>car</option></select></label><label>Start (ISO date with UTC offset)<input name="start" value="2026-11-21T19:00:00-05:00"></label><label>End (ISO date with UTC offset)<input name="end" value="2026-11-21T20:00:00-05:00"></label><label>Travel buffer (minutes)<input name="travel_minutes" type="number" min="0" max="1440" value="15"></label><button class="primary">Check & propose</button></form></div></section>
-<section id="money" class="page" hidden><div class="panel"><h2>Shared expenses</h2><p>Exact cent splits across all three members. Sent and received are member attestations, not bank verification.</p><div id="expenses"></div><h2>Payment acknowledgements</h2><div id="payments"></div><h2>Simulated tickets</h2><div id="tickets"></div></div></section>
-<section id="setup" class="page" hidden><div class="columns"><div class="panel"><h2>Your boundaries come first</h2><p>Only you can view your detailed profile. Others see a generic policy outcome.</p><form id="profileForm"><label>Your name<input name="name" required></label><label>Hard dietary / health requirements<input name="requirements" placeholder="halal, vegetarian, nut-free"></label><small>Use precise comma-separated labels. Unknown requirements require review, not automatic approval.</small><label>Allowed transport<input name="transport" required placeholder="walk, bus, train"></label><label>Total trip budget (CAD)<input name="budget" type="number" min="0" step="0.01" required></label><button class="primary">Save my boundaries</button></form></div><div class="panel"><h2>Group agreement</h2><form id="policyForm"><label>Group requirements<input name="requirements"></label><label>Allowed transport<input name="transport" required></label><label>Blocked tags<input name="blocked_tags"></label><label>Per-person cap (CAD)<input name="cap" type="number" min="0" step="0.01" required></label><button class="primary">Save new policy version</button><small>Organizer only. Existing accepted plans are not automatically cancelled.</small></form></div></div></section>
-<section id="replay" class="page" hidden><div class="panel"><h2>Courtroom replay</h2><p>Who requested what, which policy applied, and what actually happened. Records are append-only through the application; database administrators can alter them. This is not an immutable ledger.</p><div id="events"></div></div></section></main><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8fafd">
+  <title>Montreal weekend · Chat</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="chat-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+    <span class="topbar-title">Chat</span>
+    <div class="account-avatar" id="accountAvatar" aria-label="Your profile">A</div>
+  </header>
+
+  <main class="chat-shell">
+    <header class="conversation-header">
+      <div class="group-avatar" aria-hidden="true"><span>M</span></div>
+      <div class="conversation-title">
+        <h1>Montreal weekend</h1>
+        <p id="participants">Group chat</p>
+      </div>
+      <div class="header-members" id="headerMembers" aria-label="Chat members"></div>
+    </header>
+
+    <section class="conversation" aria-label="Group conversation">
+      <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+      <div id="notice" class="notice" role="status" aria-live="polite"></div>
+      <form id="chatForm" class="composer">
+        <label class="sr-only" for="message">Message the group</label>
+        <textarea id="message" rows="1" maxlength="4000" required placeholder="Message the group"></textarea>
+        <button id="sendButton" type="submit" aria-label="Send message" title="Send message">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.2 21 12 3.4 3.8 3 10.2l12.5 1.8L3 13.8l.4 6.4Z"></path></svg>
+        </button>
+      </form>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
