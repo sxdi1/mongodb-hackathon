@@ -1,130 +1,268 @@
-const $ = selector => document.querySelector(selector);
-const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-}[char]));
 
-let token = sessionStorage.getItem('token') || '';
+let token = sessionStorage.getItem("token") || "";
 let state;
+
+const avatars = {
+  Alex: "https://randomuser.me/api/portraits/men/32.jpg",
+  Sara: "https://randomuser.me/api/portraits/women/44.jpg",
+  Dev: "https://randomuser.me/api/portraits/men/75.jpg",
+  Bouncer:
+    "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=Bouncer&backgroundColor=e8eaff",
+};
 
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: body ? "POST" : "GET",
     headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: body === undefined ? undefined : JSON.stringify(body)
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
+
   const data = await response.json();
+
   if (!response.ok) {
-    throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
+    throw new Error(data.detail || "Something went wrong.");
   }
+
   return data;
 }
 
-function initials(name) {
-  return String(name || '?').trim().split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase();
-}
-
-function timeLabel(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? ''
-    : new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
-}
-
-function dateLabel(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Today';
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return 'Today';
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' }).format(date);
-}
-
 function actorDetails(actor) {
-  if (actor === 'bouncer') return { name: 'Bouncer', avatar: 'B', className: 'avatar-agent', role: 'Planning assistant' };
-  const member = state.members.find(person => person.id === actor);
-  const name = member?.name || actor;
-  const className = actor === 'sara' ? 'avatar-sara' : actor === 'dev' ? 'avatar-dev' : '';
+  if (actor === "bouncer") {
+    return {
+      name: "Bouncer",
+      avatar: avatars.Bouncer,
+      isBouncer: true,
+    };
+  }
+
+  const member = state?.members?.find((item) => item.id === actor);
+
+  if (member) {
+    return {
+      name: member.name,
+      avatar: member.avatar_url || avatars[member.name] || fallbackAvatar(member.name),
+      isBouncer: false,
+    };
+  }
+
+  const name = actor || "Unknown";
+
   return {
     name,
-    avatar: initials(name),
-    className,
-    role: ''
+    avatar: avatars[name] || fallbackAvatar(name),
+    isBouncer: false,
   };
 }
 
+function fallbackAvatar(name) {
+  return `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(name || "User")}`;
+}
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => {
+    const entities = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+
+    return entities[character];
+  });
+}
+
 function renderMessages() {
-  const messages = state.conversations.length
-    ? state.conversations
-    : [{ actor: 'bouncer', text: 'Hey, everyone! I’m Bouncer, your planning buddy. What sounds fun for the weekend?', time: new Date().toISOString() }];
-  let previousDate = '';
-  const html = messages.map(message => {
-    const day = dateLabel(message.time);
-    const divider = day !== previousDate ? `<div class="date-divider">${esc(day)}</div>` : '';
-    previousDate = day;
-    const sender = actorDetails(message.actor);
-    return `${divider}
-      <article class="message">
-        <div class="message-avatar ${sender.className}" aria-hidden="true">${esc(sender.avatar)}</div>
-        <div class="message-content">
-          <div class="message-meta">
-            <span class="message-name">${esc(sender.name)}</span>
-            ${sender.role ? `<span class="message-role">${esc(sender.role)}</span>` : ''}
-            <time class="message-time">${esc(timeLabel(message.time))}</time>
+  const log = document.getElementById("message-log");
+
+  const messages = state?.conversations || [];
+
+  if (!messages.length) {
+    log.innerHTML = `
+      <div class="loading-message">
+        Start the conversation with your group.
+      </div>
+    `;
+    return;
+  }
+
+  log.innerHTML = messages
+    .map((message) => {
+      const actor = actorDetails(message.actor);
+      const mine = message.actor === state?.me?.id;
+
+      const classes = [
+        "message-row",
+        mine ? "mine" : "",
+        actor.isBouncer ? "bouncer" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const attachment = message.image
+        ? `<img class="message-attachment" src="${escapeHTML(message.image)}" alt="Message attachment">`
+        : "";
+
+      return `
+        <div class="${classes}">
+          <img
+            class="message-avatar"
+            src="${escapeHTML(actor.avatar)}"
+            alt="${escapeHTML(actor.name)}"
+            onerror="this.src='${escapeHTML(fallbackAvatar(actor.name))}'"
+          >
+
+          <div class="message-content">
+            ${
+              !mine
+                ? `<span class="message-sender">${escapeHTML(actor.name)}</span>`
+                : ""
+            }
+
+            ${
+              actor.isBouncer
+                ? `<span class="bouncer-label">SPLITSMART BOUNCER</span>`
+                : ""
+            }
+
+            <div class="message-bubble">
+              ${escapeHTML(message.text)}
+              ${attachment}
+            </div>
           </div>
-          <p class="message-text">${esc(message.text)}</p>
-          ${message.has_image ? '<p class="message-attachment">Screenshot attached · unverified</p>' : ''}
         </div>
-      </article>`;
-  }).join('');
-  $('#messages').innerHTML = html;
-  $('#messages').scrollTop = $('#messages').scrollHeight;
+      `;
+    })
+    .join("");
+
+  log.scrollTop = log.scrollHeight;
 }
 
 function renderGroup() {
-  $('#participants').textContent = `${state.members.length} people · ${state.members.map(member => member.name).join(', ')}`;
-  $('#headerMembers').innerHTML = state.members.map(member =>
-    `<span class="member-avatar" title="${esc(member.name)}" aria-label="${esc(member.name)}">${esc(initials(member.name))}</span>`
-  ).join('');
-  $('#accountAvatar').textContent = initials(state.me.name);
-  $('#accountAvatar').setAttribute('aria-label', `Signed in as ${state.me.name}`);
+  const members = state?.members || [];
+
+  const participantNames = members.map((member) => member.name);
+
+  const participants = document.getElementById("participants");
+
+  if (participants) {
+    participants.textContent = participantNames.join(", ") || "Group conversation";
+  }
 }
 
 function showNotice(message) {
-  const notice = $('#notice');
-  notice.textContent = message;
+  const notice = document.getElementById("notice");
+
+  notice.textContent = message || "";
 }
 
 function showAuthenticationPrompt() {
-  const notice = $('#notice');
-  notice.innerHTML = `
-    <span>Enter your member access token to join this chat.</span>
-    <form class="connect-form">
-      <label class="sr-only" for="accessToken">Member access token</label>
-      <input id="accessToken" type="password" autocomplete="current-password" placeholder="Member access token" required>
-      <button type="submit">Join chat</button>
-    </form>`;
-  notice.setAttribute('role', 'status');
-  notice.querySelector('.connect-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    token = $('#accessToken').value;
-    sessionStorage.setItem('token', token);
-    await loadChat();
+  const message = "Enter your member access token to continue.";
+
+  showNotice(message);
+
+  const tokenInput = document.createElement("input");
+  tokenInput.placeholder = "Access token";
+  tokenInput.style.margin = "8px";
+  tokenInput.style.padding = "8px";
+  tokenInput.style.borderRadius = "8px";
+  tokenInput.style.border = "1px solid #ccc";
+
+  const button = document.createElement("button");
+  button.textContent = "Continue";
+  button.style.padding = "8px 14px";
+  button.style.borderRadius = "8px";
+  button.style.border = "none";
+  button.style.background = "#007aff";
+  button.style.color = "white";
+  button.style.cursor = "pointer";
+
+  const notice = document.getElementById("notice");
+
+  notice.innerHTML = "";
+  notice.append(tokenInput, button);
+
+  button.addEventListener("click", async () => {
+    token = tokenInput.value.trim();
+
+    if (!token) return;
+
+    sessionStorage.setItem("token", token);
+
+    try {
+      await loadChat();
+    } catch (error) {
+      showNotice(error.message);
+    }
   });
 }
 
 async function loadChat() {
+  state = await api("state");
+
+  renderGroup();
+  renderMessages();
+  showNotice("");
+}
+
+async function sendMessage(event) {
+  event.preventDefault();
+
+  const input = document.getElementById("message-input");
+  const text = input.value.trim();
+
+  if (!text) return;
+
+  const sendButton = document.querySelector(".send-button");
+
+  sendButton.disabled = true;
+
   try {
-    state = await api('state');
-    renderGroup();
-    renderMessages();
-    showNotice('');
+    await api("chat", { text });
+
+    input.value = "";
+    input.style.height = "auto";
+
+    await loadChat();
   } catch (error) {
-    if (error.message.includes('token')) {
+    showNotice(error.message);
+  } finally {
+    sendButton.disabled = false;
+    input.focus();
+  }
+}
+
+async function boot() {
+  const form = document.getElementById("chat-form");
+  const input = document.getElementById("message-input");
+
+  form.addEventListener("submit", sendMessage);
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+  });
+
+  try {
+    const config = await api("config");
+
+    if (config.demo && !token) {
+      token = "demo-alex";
+    }
+
+    await loadChat();
+  } catch (error) {
+    if (!token) {
       showAuthenticationPrompt();
     } else {
       showNotice(error.message);
@@ -132,49 +270,4 @@ async function loadChat() {
   }
 }
 
-$('#chatForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  const input = $('#message');
-  const text = input.value.trim();
-  if (!text) return;
-
-  const button = $('#sendButton');
-  button.disabled = true;
-  showNotice('');
-  try {
-    await api('chat', { text });
-    input.value = '';
-    input.style.height = 'auto';
-    await loadChat();
-    input.focus();
-  } catch (error) {
-    showNotice(error.message);
-  } finally {
-    button.disabled = false;
-  }
-});
-
-$('#message').addEventListener('keydown', event => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    $('#chatForm').requestSubmit();
-  }
-});
-
-$('#message').addEventListener('input', event => {
-  event.target.style.height = 'auto';
-  event.target.style.height = `${Math.min(event.target.scrollHeight, 140)}px`;
-});
-
-(async () => {
-  try {
-    const config = await api('config');
-    if (config.demo && !token) {
-      token = 'demo-alex';
-      sessionStorage.setItem('token', token);
-    }
-    await loadChat();
-  } catch (error) {
-    showNotice(error.message);
-  }
-})();
+boot();

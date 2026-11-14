@@ -1,41 +1,79 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f8fafd">
-  <title>Montreal weekend · Chat</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SplitSmart | Messages</title>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="chat-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-    <span class="topbar-title">Chat</span>
-    <div class="account-avatar" id="accountAvatar" aria-label="Your profile">A</div>
-  </header>
+  <main class="messages-app">
 
-  <main class="chat-shell">
-    <header class="conversation-header">
-      <div class="group-avatar" aria-hidden="true"><span>M</span></div>
-      <div class="conversation-title">
-        <h1>Montreal weekend</h1>
-        <p id="participants">Group chat</p>
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <h1>Messages</h1>
+        <button class="compose-button" aria-label="New message">＋</button>
       </div>
-      <div class="header-members" id="headerMembers" aria-label="Chat members"></div>
-    </header>
 
-    <section class="conversation" aria-label="Group conversation">
-      <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
-      <div id="notice" class="notice" role="status" aria-live="polite"></div>
-      <form id="chatForm" class="composer">
-        <label class="sr-only" for="message">Message the group</label>
-        <textarea id="message" rows="1" maxlength="4000" required placeholder="Message the group"></textarea>
-        <button id="sendButton" type="submit" aria-label="Send message" title="Send message">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.2 21 12 3.4 3.8 3 10.2l12.5 1.8L3 13.8l.4 6.4Z"></path></svg>
+      <div class="search-container">
+        <input type="text" placeholder="Search" aria-label="Search conversations" />
+      </div>
+
+      <div class="conversation active">
+        <div class="avatar-stack">
+          <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Alex" />
+          <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Sara" />
+          <img src="https://randomuser.me/api/portraits/men/75.jpg" alt="Dev" />
+        </div>
+        <div class="conversation-info">
+          <div class="conversation-heading">
+            <strong>Montreal weekend</strong>
+            <span>Now</span>
+          </div>
+          <p>Group conversation</p>
+        </div>
+      </div>
+    </aside>
+
+    <section class="chat-panel">
+      <header class="chat-header">
+        <div class="header-group">
+          <div class="header-avatar-stack">
+            <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Alex" />
+            <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Sara" />
+            <img src="https://randomuser.me/api/portraits/men/75.jpg" alt="Dev" />
+          </div>
+          <div>
+            <h2>Montreal weekend</h2>
+            <p id="participants">Alex, Sara, Dev</p>
+          </div>
+        </div>
+        <button class="info-button" aria-label="Conversation information">ⓘ</button>
+      </header>
+
+      <div id="message-log" class="message-log">
+        <div class="loading-message">Loading conversation...</div>
+      </div>
+
+      <div id="notice" class="notice" aria-live="polite"></div>
+
+      <form id="chat-form" class="composer">
+        <button type="button" class="attachment-button" aria-label="Attachments">＋</button>
+        <textarea
+          id="message-input"
+          placeholder="iMessage"
+          rows="1"
+          aria-label="Write a message"
+        ></textarea>
+        <button type="submit" class="send-button" aria-label="Send message">
+          ↑
         </button>
       </form>
     </section>
+
   </main>
+
   <script src="/app.js"></script>
 </body>
 </html>
