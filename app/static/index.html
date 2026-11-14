@@ -4,74 +4,67 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SplitSmart | Messages</title>
+  <meta name="theme-color" content="#242526" />
+  <title>SplitSmart Messages</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <main class="messages-app">
-
+  <main class="messages-window">
     <aside class="sidebar">
-      <div class="sidebar-top">
-        <h1>Messages</h1>
-        <button class="compose-button" aria-label="New message">＋</button>
+      <div class="window-controls" aria-hidden="true">
+        <span class="traffic-light red"></span>
+        <span class="traffic-light yellow"></span>
+        <span class="traffic-light green"></span>
+        <span class="sidebar-compose">↗</span>
       </div>
 
-      <div class="search-container">
-        <input type="text" placeholder="Search" aria-label="Search conversations" />
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="conversation-search" type="search" placeholder="Search" aria-label="Search conversations" />
       </div>
 
-      <div class="conversation active">
-        <div class="avatar-stack">
-          <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Alex" />
-          <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Sara" />
-          <img src="https://randomuser.me/api/portraits/men/75.jpg" alt="Dev" />
+      <section class="pinned-section" aria-label="Pinned contacts">
+        <div id="pinned-contacts" class="pinned-contacts">
+          <div class="pinned-placeholder">Loading contacts…</div>
         </div>
-        <div class="conversation-info">
-          <div class="conversation-heading">
-            <strong>Montreal weekend</strong>
-            <span>Now</span>
-          </div>
-          <p>Group conversation</p>
+      </section>
+
+      <section class="conversation-section" aria-label="Conversations">
+        <div id="conversation-list" class="conversation-list">
+          <div class="conversation-placeholder">Loading conversations…</div>
         </div>
-      </div>
+      </section>
+      <div class="sidebar-footer">SplitSmart</div>
     </aside>
 
     <section class="chat-panel">
-      <header class="chat-header">
-        <div class="header-group">
-          <div class="header-avatar-stack">
-            <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Alex" />
-            <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Sara" />
-            <img src="https://randomuser.me/api/portraits/men/75.jpg" alt="Dev" />
-          </div>
-          <div>
-            <h2>Montreal weekend</h2>
-            <p id="participants">Alex, Sara, Dev</p>
-          </div>
+      <header class="chat-toolbar">
+        <div class="chat-recipient">
+          <span class="recipient-prefix">To:</span>
+          <strong id="chat-title">Montreal weekend</strong>
         </div>
-        <button class="info-button" aria-label="Conversation information">ⓘ</button>
+        <div class="toolbar-actions" aria-hidden="true">
+          <span class="toolbar-icon video-icon">▣</span>
+          <span class="toolbar-icon info-icon">ⓘ</span>
+        </div>
       </header>
 
-      <div id="message-log" class="message-log">
-        <div class="loading-message">Loading conversation...</div>
+      <div id="message-log" class="message-log" aria-live="polite">
+        <div class="loading-message">Loading conversation…</div>
       </div>
 
-      <div id="notice" class="notice" aria-live="polite"></div>
+      <div id="notice" class="notice" role="status" aria-live="polite"></div>
 
       <form id="chat-form" class="composer">
-        <button type="button" class="attachment-button" aria-label="Attachments">＋</button>
-        <textarea
-          id="message-input"
-          placeholder="iMessage"
-          rows="1"
-          aria-label="Write a message"
-        ></textarea>
-        <button type="submit" class="send-button" aria-label="Send message">
-          ↑
-        </button>
+        <div class="composer-plus" aria-hidden="true">+</div>
+        <div class="composer-field">
+          <textarea id="message-input" rows="1" placeholder="iMessage" aria-label="iMessage"></textarea>
+          <span class="audio-wave" aria-hidden="true">▥</span>
+        </div>
+        <div class="emoji-button" aria-hidden="true">☺</div>
+        <button class="send-button" type="submit" aria-label="Send message">↑</button>
       </form>
     </section>
-
   </main>
 
   <script src="/app.js"></script>
