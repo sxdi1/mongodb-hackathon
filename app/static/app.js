@@ -16,7 +16,10 @@ async function api(path, body) {
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
-  const data = await response.json();
+  const contentType = response.headers.get('content-type') || '';
+  const data = contentType.includes('application/json')
+    ? await response.json()
+    : { detail: (await response.text()).slice(0, 500) || `Request failed with HTTP ${response.status}` };
   if (!response.ok) {
     throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
   }

@@ -222,8 +222,29 @@ def test_gemini_returns_structured_keyword_understanding(monkeypatch):
     config=models.generate_content.call_args.kwargs['config']
     assert models.generate_content.call_count==1
     assert config.response_mime_type=='application/json'
-    assert config.response_schema.__name__=='ConversationUnderstanding'
+    assert config.response_schema.type.name=='OBJECT'
+    assert config.response_schema.properties['reply'].type.name=='STRING'
     assert not config.tools
+
+def test_gemini_reply_uses_conversational_response(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    import google.genai
+    from app.adapters import ChatEnvelope
+    from app import agent
+
+    response=SimpleNamespace(
+        text='{"keywords":["tacos","Montreal"],"intent":"asking for restaurant ideas","entities":["Montreal"],"reply":"I can help look for tacos in Montreal. Do you have a budget or dietary preference I should keep in mind?"}'
+    )
+    models=SimpleNamespace(generate_content=MagicMock(return_value=response))
+    monkeypatch.setattr(google.genai,'Client',lambda **kwargs: SimpleNamespace(models=models))
+    monkeypatch.setenv('AGENT_MODE','gemini')
+    monkeypatch.setenv('GEMINI_API_KEY','test-key')
+
+    result=agent.run(ChatEnvelope(actor='alex',actor_name='Alex',text='I want tacos in Montreal'))
+
+    assert result['reply'].startswith('I can help look for tacos in Montreal.')
+    assert result['analysis_source']=='gemini'
 
 def test_unverified_claims_review(client):
     p=plan();p['venue_id']=None;p['claims']=['halal','vegetarian','nut-free']

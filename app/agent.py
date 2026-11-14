@@ -5,11 +5,12 @@ from typing import Any
 from .expense_mentions import extract_expense_mention
 from .models import ConversationUnderstanding
 
-SYSTEM = '''You analyze the latest message in a group chat.
-Return a short list of the important keywords the user actually mentioned.
-Also return a brief intent and explicit entities such as people, places, amounts, dates, and items.
-Do not answer the request, recommend anything, infer unstated facts, or take actions.
-Use recent conversation only to understand references in the latest message.
+SYSTEM = '''You are Bouncer, a helpful participant in a group chat.
+Read the latest message together with recent conversation context.
+Return important keywords, a brief intent, explicit entities such as people, places, amounts, dates, and items, and a concise conversational reply.
+The reply must directly acknowledge or answer the latest message using only information in the chat. Do not invent facts, make bookings, spend money, or take actions.
+If the user asks for information that is not available, say what is missing and ask one useful follow-up question.
+Use recent conversation only to resolve references such as “there”, “that”, or “the cheaper one”.
 '''
 
 STOP_WORDS = {
@@ -47,6 +48,8 @@ def _local_understanding(text: str) -> dict[str, Any]:
 
 
 def _response(analysis: dict[str, Any]) -> str:
+    if analysis.get('reply'):
+        return analysis['reply'].strip()
     keywords = ', '.join(analysis['keywords'])
     intent = analysis['intent'].strip()
     if intent:
@@ -108,14 +111,33 @@ def run(envelope) -> dict[str, Any]:
     contents.append(types.Content(role='user', parts=[
         types.Part.from_text(text=f'{envelope.actor_name or envelope.actor}: {envelope.text}')
     ]))
+    response_schema = types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            'keywords': types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                min_items=1,
+                max_items=12,
+            ),
+            'intent': types.Schema(type=types.Type.STRING, min_length=1, max_length=120),
+            'entities': types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(type=types.Type.STRING),
+                max_items=12,
+            ),
+            'reply': types.Schema(type=types.Type.STRING, min_length=1, max_length=500),
+        },
+        required=['keywords', 'intent', 'entities', 'reply'],
+    )
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM,
         response_mime_type='application/json',
-        response_schema=ConversationUnderstanding,
+        response_schema=response_schema,
         temperature=0,
     )
     response = client.models.generate_content(
-        model=os.getenv('GEMINI_MODEL', 'gemini-3.8-flash'),
+        model=os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview'),
         contents=contents,
         config=config,
     )
