@@ -1,5 +1,6 @@
 """Transactional document repository: SQLite demo or MongoDB replica set/Atlas."""
 import json, os, sqlite3
+import certifi
 from contextlib import contextmanager, closing
 from .seed import seed
 
@@ -13,7 +14,11 @@ class Store:
         self.mongo = os.getenv('STORAGE','sqlite') == 'mongo'
         if self.mongo:
             from pymongo import MongoClient
-            self.client = MongoClient(os.environ['MONGODB_URI'], serverSelectionTimeoutMS=5000)
+            self.client = MongoClient(
+                os.environ['MONGODB_URI'],
+                serverSelectionTimeoutMS=5000,
+                tlsCAFile=certifi.where(),
+            )
             self.db = self.client[os.getenv('MONGODB_DB','splitsmart')]
             self.client.admin.command('ping')
             for c in COLLECTIONS:

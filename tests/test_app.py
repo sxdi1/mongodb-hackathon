@@ -17,6 +17,30 @@ def post(c,payload): return c.post('/api/proposals',json=payload,headers=h()).js
 def vote_all(c,id):
     for who in ['alex','sara','dev']: assert c.post('/api/vote',json={'proposal_id':id},headers=h(who)).status_code==200
 
+def test_mongo_client_uses_certifi_ca_bundle(monkeypatch):
+    from unittest.mock import MagicMock
+    import certifi
+    import pymongo
+    from app import store
+
+    client=MagicMock()
+    db=MagicMock()
+    client.__getitem__.return_value=db
+    db.list_collection_names.return_value=list(store.COLLECTIONS)
+    db.groups.find_one.return_value={'id':'montreal'}
+    mongo_client=MagicMock(return_value=client)
+    monkeypatch.setattr(pymongo,'MongoClient',mongo_client)
+    monkeypatch.setenv('STORAGE','mongo')
+    monkeypatch.setenv('MONGODB_URI','mongodb://localhost/test')
+
+    store.Store()
+
+    mongo_client.assert_called_once_with(
+        'mongodb://localhost/test',
+        serverSelectionTimeoutMS=5000,
+        tlsCAFile=certifi.where(),
+    )
+
 def test_auth_and_private_profiles(client):
     assert client.get('/api/state').status_code==401
     s=client.get('/api/state',headers=h()).json()
