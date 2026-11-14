@@ -1,6 +1,6 @@
 # SplitSmart Bouncer
 
-A hackathon group-trip coordinator: FastAPI, optional MongoDB Atlas persistence, a bounded Gemini tool-calling agent, and a single responsive group-chat interface. The planning agent participates in the conversation as **Bouncer**; the web UI has no dashboard, tabs, or side panels.
+A hackathon group-trip coordinator: FastAPI, optional MongoDB Atlas persistence, a Gemini-backed conversation-understanding test, and a single responsive group-chat interface. The agent participates as **Bouncer**; the web UI has no dashboard, tabs, or side panels.
 
 ## Run locally
 
@@ -22,7 +22,7 @@ The delivered local `.env` contains the supplied Atlas URI, but starts in SQLite
 ## What works
 
 - Three seeded members with private editable boundaries, transport modes, and total budgets; organizer-controlled versioned group policy.
-- A single-thread web chat with recent conversation context for Gemini; the authenticated chat API also accepts PNG/JPEG attachments up to 2 MB.
+- A single-thread web chat with recent conversation context for Gemini; the authenticated chat API accepts PNG/JPEG attachments but the current agent does not parse images.
 - Deterministic tag, dietary evidence, transport, per-person cap, cumulative budget, and schedule checks. Scheduling uses explicit timezone offsets and a configurable travel buffer; it does not query live routes or opening hours.
 - Eligible proposals go to one ballot round. Each member has one replaceable vote. All members must vote; organizer closes. Most votes wins, ties use lowest cost then earliest submission then ID. The winner is rechecked against current policy and itinerary.
 - Equal expense splitting in integer CAD cents; sorted member IDs receive remainder cents deterministically. Submitter is payer. Every debtor and payer separately attest sent/received. No payment API, refund, bank verification, or money movement exists.
@@ -31,9 +31,9 @@ The delivered local `.env` contains the supplied Atlas URI, but starts in SQLite
 
 ## Chat demo
 
-The web app opens directly to the Montreal weekend group chat. Start with a natural message such as “Hey, what should we do this weekend?” The mock agent responds conversationally and recognizes a few demo ideas: “propose Garden Table,” “visit museum,” and “add $45 tequila.” The fictional Garden Table venue and all policy outcomes are clearly labeled by the agent. Set `AGENT_MODE=gemini` and configure a Gemini API key to use free-form conversation; recent chat turns are sent as context. The app does not show separate planning, expense, policy, or audit screens.
+The web app opens directly to the Montreal weekend group chat. In this understanding-test stage, Bouncer replies with the keywords, intent, and entities it understood from the latest message rather than recommending places or taking actions. With `AGENT_MODE=gemini` and a configured Gemini API key, these fields come from Gemini structured JSON output; mock mode and provider errors use a simple local keyword fallback. The validated, versioned analysis is stored on the user's conversation document with its source and authenticated reporter ID so it can be migrated into its own MongoDB collection later.
 
-Text expense statements are extracted into a versioned `expense_mention` object on the authenticated user's conversation document. The object contains normalized integer cents, currency and its source, description, merchant, date text, item details, clarification status, and server-stamped source/reporting member IDs. Partial mentions trigger a follow-up and can be completed in the next message, including by another group member, while preserving the original reporter. Model output cannot set member IDs. This stage does not create an expense, split costs, or initiate payment. In Gemini mode the model extracts only facts stated in text; mock mode supports common amount and expense phrases. Receipt images are not parsed.
+Text expense statements are also captured by a deterministic parser into a versioned `expense_mention` object on the authenticated user's conversation document. The object contains normalized integer cents, currency and its source, description, merchant, date text, item details, clarification status, and server-stamped source/reporting member IDs. Partial mentions trigger a follow-up and can be completed in the next message, including by another group member, while preserving the original reporter. Model output cannot set member IDs. This stage does not create an expense, split costs, or initiate payment. Receipt images are not parsed.
 
 The underlying API still supports proposal voting, expense acknowledgements, boundary updates, and simulated ticket actions. For an automated expense flow against a fresh running server: `python scripts/demo.py`. It deliberately writes demo records. To start over in SQLite mode, stop the server and rename `splitsmart.sqlite`; the next start seeds a fresh database.
 
@@ -50,9 +50,9 @@ MongoDB validators enforce document structure; Python evaluates cross-document p
 
 ## Gemini setup
 
-Set `AGENT_MODE=gemini`, `GEMINI_API_KEY`, and a `GEMINI_MODEL` available to your Google project. The example model is configurable; access/availability is not assumed. The Google Gen AI SDK sends user text and optional image bytes to Gemini. Do not attach sensitive receipts without consent.
+Set `AGENT_MODE=gemini`, `GEMINI_API_KEY`, and a `GEMINI_MODEL` available to your Google project. The example model is configurable; access/availability is not assumed. The Google Gen AI SDK sends the latest user text and recent conversation turns to Gemini for structured keyword understanding. Images are not sent to Gemini by the current agent.
 
-The explicit loop permits only the `propose` tool, validates arguments with Pydantic, and allows one successful proposal per request with at most four model rounds. Tool output is fed back to Gemini. Identity comes from the bearer token, not model arguments. Model prose can be wrong; deterministic server policy decisions are authoritative. Screenshots always lose any inferred venue ID and require evidence review; images are not persisted in this MVP. Mock mode does not pretend to perform OCR.
+The current chat agent makes one structured-output request and validates the result with Pydantic. It does not expose action tools, search, create proposals, or write expenses. User identity is attached by the server, not generated by Gemini. If Gemini is unavailable, the server logs the provider error and returns a clearly labeled local keyword summary.
 
 ## Evidence and limitations
 
@@ -76,8 +76,8 @@ API tests cover authentication, privacy, malicious requests, evidence review, bu
 
 ## Architecture
 
-`Web / future authenticated adapter → agent proposes → Pydantic → deterministic service → transactional repository → decision + audit + state → web replay`
+`Web / future authenticated adapter → structured conversation understanding → versioned analysis on conversation → transactional repository`
 
 Read-only UI refreshes currently acquire the same repository transaction as writes for simplicity. MongoDB startup migration and all-collection loading are hackathon-scale choices; use indexed repository queries, pagination and migration tooling before scaling.
 
-API references used: [Google Gen AI SDK](https://googleapis.github.io/python-genai/), [Gemini function calling](https://ai.google.dev/gemini-api/docs/function-calling), [MongoDB schema validation](https://www.mongodb.com/docs/manual/core/schema-validation/update-schema-validation/).
+API references used: [Google Gen AI SDK](https://googleapis.github.io/python-genai/), [Gemini structured output](https://ai.google.dev/gemini-api/docs/structured-output), [MongoDB schema validation](https://www.mongodb.com/docs/manual/core/schema-validation/update-schema-validation/).

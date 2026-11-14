@@ -11,7 +11,6 @@ from .models import Profile, Policy, Proposal, Chat, Vote, Acknowledge, Cancel
 from .service import find, event, uid, now, propose, resolve
 from .adapters import WebAdapter
 from . import agent
-from .search import search_venues
 
 logger=logging.getLogger(__name__)
 load_dotenv()
@@ -82,6 +81,7 @@ def chat(body:Chat,who=Depends(actor)):
                 actor=message['actor'],
                 name='Bouncer' if message['actor']=='bouncer' else find(d,'members',message['actor'])['name'],
                 text=message['text'],
+                analysis=message.get('analysis'),
                 extraction=message.get('extraction'),
                 reply_context=message.get('reply_context'),
             )
@@ -96,22 +96,15 @@ def chat(body:Chat,who=Depends(actor)):
             time=now(),
             has_image=bool(image),
         ))
-    def submit(payload):
-        # Image-derived venue identity is not verification. No model-supplied provenance.
-        if image: payload['venue_id']=None
-        with app.state.store.transaction() as d: return propose(d,who,payload,'screenshot inference' if image else 'text inference')
-    def search(query):
-        with app.state.store.transaction() as d: return search_venues(d, query)
     envelope = WebAdapter().normalize(who,dict(
         text=body.text,
         image=image,
         mime_type=body.mime_type,
         actor_name=actor_name,
         history=history,
-        search=search,
     ))
     try:
-        result=agent.run(envelope,submit)
+        result=agent.run(envelope)
     except Exception as error:
         detail=str(error)
         api_key=os.getenv('GEMINI_API_KEY','')
@@ -138,8 +131,16 @@ def chat(body:Chat,who=Depends(actor)):
                 'message':'Provider failure; a local conversational reply was used',
             })
     with app.state.store.transaction() as d:
+        user_message=next(message for message in d['conversations'] if message['id']==user_message_id)
+        if result.get('analysis'):
+            analysis=result['analysis']
+            analysis['schema_version']=1
+            analysis['source']=result.get('analysis_source','local')
+            analysis['reported_by']=who
+            analysis['source_message_id']=user_message_id
+            user_message['analysis']=analysis
+            result['analysis']=analysis
         if result.get('extraction'):
-            user_message=next(message for message in d['conversations'] if message['id']==user_message_id)
             extraction=result['extraction']
             extraction.setdefault('source_message_id',user_message_id)
             extraction.setdefault('reported_by',who)

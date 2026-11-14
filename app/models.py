@@ -47,6 +47,11 @@ class ExpenseMention(Strict):
     occurred_on_text: str | None = Field(default=None, max_length=80, description='Date or relative date exactly as stated, not inferred')
     items: list[ExpenseLine] = Field(default_factory=list, max_length=50)
 
+class ConversationUnderstanding(Strict):
+    keywords: list[str] = Field(min_length=1, max_length=12, description='Important words or short phrases the user mentioned')
+    intent: str = Field(min_length=1, max_length=120, description='Short description of what the user appears to be doing or asking')
+    entities: list[str] = Field(default_factory=list, max_length=12, description='Explicit names, places, amounts, dates, or items mentioned')
+
 class Chat(Strict):
     text: str = Field(min_length=1, max_length=4000)
     image_base64: str | None = Field(default=None, max_length=2800000)
