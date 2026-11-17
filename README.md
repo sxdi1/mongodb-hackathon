@@ -1,5 +1,9 @@
 # SplitSmart Bouncer
 
+## New: standalone Next.js prototype
+
+The [SplitSmart frontend](frontend/README.md) is the new polished, interactive Toronto group-planning demo. Launch it independently with `cd frontend`, `npm install`, then `npm run dev`, and open http://127.0.0.1:3000. It includes guided demo controls, group voting, dietary checks, an itinerary, editable equal/itemized receipt splitting, and two-way settlement acknowledgment. All data and interactions are simulated in the browser; it requires no backend or API keys. The existing Python application below remains independently available at port 8000.
+
 A hackathon group-trip coordinator: FastAPI, optional MongoDB Atlas persistence, a Gemini-backed conversation-understanding test, and a single responsive group-chat interface. The agent participates as **Bouncer**; the web UI has no dashboard, tabs, or side panels.
 
 ## Run locally
