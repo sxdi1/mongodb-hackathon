@@ -1,6 +1,7 @@
 let token = sessionStorage.getItem("token") || "";
 let state;
 let demoMode = false;
+let chatBusy = false;
 
 const defaultAvatars = {
   Alex: "https://randomuser.me/api/portraits/men/32.jpg",
@@ -11,6 +12,7 @@ const defaultAvatars = {
 
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, {
+    cache: "no-store",
     method: body ? "POST" : "GET",
     headers: {
       "Content-Type": "application/json",
@@ -19,8 +21,13 @@ async function api(path, body) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || "Something went wrong.");
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); }
+  catch { throw new Error(`Server error (${response.status}). Please retry or check the server terminal.`); }
+  if (!response.ok) throw new Error(response.status === 405 && path === "chat/clear"
+    ? "This server has not loaded Clear messages yet. Restart Start-Demo.ps1, open port 8010, then press Ctrl+F5."
+    : data.detail || "Something went wrong.");
   return data;
 }
 
@@ -220,12 +227,15 @@ async function loadChat() {
 
 async function sendMessage(event) {
   event.preventDefault();
+  if (chatBusy || document.querySelector('.send-button').disabled) return;
 
   const input = document.getElementById("message-input");
   const text = input.value.trim();
   if (!text) return;
 
   const button = document.querySelector(".send-button");
+  chatBusy = true;
+  document.getElementById("clear-messages").disabled = true;
   button.disabled = true;
 
   try {
@@ -237,6 +247,8 @@ async function sendMessage(event) {
   } catch (error) {
     showNotice(error.message);
   } finally {
+    chatBusy = false;
+    document.getElementById("clear-messages").disabled = false;
     button.disabled = !input.value.trim();
     input.focus();
   }
@@ -249,6 +261,26 @@ function boot() {
   const infoButton = document.getElementById("group-info-button");
   const infoPanel = document.getElementById("group-info");
   const memberSelect = document.getElementById("demo-member-select");
+  const clearButton = document.getElementById("clear-messages");
+  clearButton.addEventListener("click", async () => {
+    if (chatBusy || !confirm("Permanently clear all saved messages and their expense mentions for everyone in this demo? Policies and ledger records will be kept.")) return;
+    chatBusy = true;
+    clearButton.disabled = true;
+    try {
+      await api("chat/clear", {});
+      input.value = "";
+      input.dispatchEvent(new Event("input"));
+      await loadChat();
+      if (state.conversations.length) throw new Error("Messages are still present. Another chat request may have arrived; try clearing again.");
+      showNotice("Messages cleared. Ready for a new demo.");
+    } catch (error) {
+      showNotice(error.message);
+    } finally {
+      chatBusy = false;
+      clearButton.disabled = false;
+      input.focus();
+    }
+  });
 
   form.addEventListener("submit", sendMessage);
   input.addEventListener("input", () => {
@@ -285,6 +317,27 @@ function boot() {
   api("config")
     .then((config) => {
       demoMode = Boolean(config.demo);
+      clearButton.hidden = !demoMode;
+      if (config.agent === 'scripted') {
+        const guide = document.createElement('div');
+        guide.style.cssText = 'padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+        const label = document.createElement('span');
+        label.textContent = 'Scripted demo';
+        guide.append(label);
+        for (const text of ['Hey Bouncer!', 'I want tacos in Montreal', 'Our budget is $30 per person', 'We need halal and nut-free options', 'We paid $90 for dinner', 'Split it equally', 'Recap']) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = text;
+          button.style.cssText = 'border:1px solid #ccc;border-radius:16px;padding:6px 10px;background:white;color:#222;cursor:pointer';
+          button.addEventListener('click', () => {
+            input.value = text;
+            input.dispatchEvent(new Event('input'));
+            input.focus();
+          });
+          guide.append(button);
+        }
+        form.before(guide);
+      }
       if (demoMode && !token) {
         token = "demo-alex";
       }

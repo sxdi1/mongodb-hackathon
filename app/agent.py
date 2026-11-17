@@ -81,6 +81,11 @@ def fallback(envelope) -> dict[str, Any]:
 
 
 def run(envelope) -> dict[str, Any]:
+    if os.getenv('AGENT_MODE') == 'scripted' and not envelope.image:
+        from .demo_chat import reply
+        result = _result(envelope.text, envelope.history, 'scripted', 'ok')
+        result['reply'] = reply(envelope.text, envelope.history, result['extraction'])
+        return result
     if envelope.image:
         return {
             'reply':'I can’t analyze images in this mode. Please type the message you want me to understand.',

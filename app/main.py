@@ -131,7 +131,9 @@ def chat(body:Chat,who=Depends(actor)):
                 'message':'Provider failure; a local conversational reply was used',
             })
     with app.state.store.transaction() as d:
-        user_message=next(message for message in d['conversations'] if message['id']==user_message_id)
+        user_message=next((message for message in d['conversations'] if message['id']==user_message_id),None)
+        if user_message is None:
+            raise HTTPException(409,'Chat was cleared while this reply was being generated. Send a new message.')
         if result.get('analysis'):
             analysis=result['analysis']
             analysis['schema_version']=1
@@ -158,6 +160,15 @@ def chat(body:Chat,who=Depends(actor)):
             reply_context=reply_context,
         ))
     return result
+
+@app.post('/api/chat/clear')
+def clear_chat(who=Depends(actor)):
+    if not DEMO: raise HTTPException(403,'Clearing messages is available only in demo mode')
+    with app.state.store.transaction() as d:
+        count=len(d['conversations'])
+        d['conversations']=[]
+        event(d,who,'chat.cleared',{'messages_removed':count})
+    return {'ok':True,'messages_removed':count}
 
 @app.post('/api/vote')
 def vote(body:Vote,who=Depends(actor)):
